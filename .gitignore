@@ -1,4 +1,35 @@
+# Database (org data)
+data/*.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment & secrets
+.env
+.env.*
+config.local.*
+secrets.*
+
+# Python
 __pycache__/
 *.pyc
-*.db
-data/*.db
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Exports / org data dumps
+exports/
+backups/
+*.csv
+*.json.bak
+
+# Logs
+*.log
+logs/
