@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fi-tracker — Familieidræt</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>🐺 fi-tracker</h1>
+  <span class="subtitle">Familieidræt</span>
+</header>
+
+<!-- tabs -->
+<div class="tabs">
+  <div class="tab active" data-tab="dashboard">Dashboard</div>
+  <div class="tab" data-tab="fundraising">Fundraising</div>
+  <div class="tab" data-tab="fund-pipeline">Fund Pipeline</div>
+  <div class="tab" data-tab="tasks">Tasks</div>
+  <div class="tab" data-tab="ideas">Ideas</div>
+  <div class="tab" data-tab="arhjul">Årshjul</div>
+</div>
+
+<!-- Dashboard -->
+<div class="panel active" id="panel-dashboard">
+  <div class="stats" id="stats"></div>
+  <h2 style="margin-bottom:0.75rem;font-size:0.9rem;color:#888;">Senaste poster</h2>
+  <div id="recent-tables"></div>
+</div>
+
+<!-- Fundraising -->
+<div class="panel" id="panel-fundraising">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Fundraising</h2>
+    <button class="btn" onclick="openFundraisingModal()">+ Add</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Name</th><th>Ansøgt (kr)</th><th>Modtaget (kr)</th><th>Status</th><th>Deadline</th><th>Notes</th><th></th>
+    </tr></thead>
+    <tbody id="tb-fundraising"></tbody>
+  </table>
+</div>
+
+<!-- Fund Pipeline -->
+<div class="panel" id="panel-fund-pipeline">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Fund Pipeline</h2>
+    <button class="btn" onclick="openFundPipelineModal()">+ Add</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Fund</th><th>Estimat (kr)</th><th>Deadline</th><th>Status</th><th>Notes</th><th></th>
+    </tr></thead>
+    <tbody id="tb-fund-pipeline"></tbody>
+  </table>
+</div>
+
+<!-- Tasks -->
+<div class="panel" id="panel-tasks">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Tasks</h2>
+    <button class="btn" onclick="openTaskModal()">+ Add</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Title</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Due</th><th>Notes</th><th></th>
+    </tr></thead>
+    <tbody id="tb-tasks"></tbody>
+  </table>
+</div>
+
+<!-- Ideas -->
+<div class="panel" id="panel-ideas">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Ideas</h2>
+    <button class="btn" onclick="openIdeaModal()">+ Add</button>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Title</th><th>Category</th><th>Status</th><th>Description</th><th></th>
+    </tr></thead>
+    <tbody id="tb-ideas"></tbody>
+  </table>
+</div>
+
+<!-- Årshjul -->
+<div class="panel" id="panel-arhjul">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Årshjul — Annual Calendar</h2>
+    <button class="btn" onclick="openEventModal()">+ Add Event</button>
+  </div>
+  <div class="year-grid" id="year-grid"></div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-fundraising">
+  <div class="modal">
+    <h2>Fundraising</h2>
+    <input type="hidden" id="fr-id">
+    <div class="form-group"><label>Name</label><input id="fr-name" placeholder="e.g. Nordea Fonden"></div>
+    <div class="form-group"><label>Amount Applied (kr)</label><input id="fr-amount-applied" type="number" placeholder="0"></div>
+    <div class="form-group"><label>Amount Received (kr)</label><input id="fr-amount-received" type="number" placeholder="0"></div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="fr-status">
+        <option value="identified">Identified</option>
+        <option value="applied">Applied</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="received">Received</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Deadline</label><input id="fr-deadline" type="date"></div>
+    <div class="form-group"><label>Notes</label><textarea id="fr-notes"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="saveFundraising()">Gem</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-fund-pipeline">
+  <div class="modal">
+    <h2>Fund Pipeline</h2>
+    <input type="hidden" id="fp-id">
+    <div class="form-group"><label>Fund Name</label><input id="fp-fund-name" placeholder="e.g. InspirationalFonden"></div>
+    <div class="form-group"><label>Description</label><textarea id="fp-description"></textarea></div>
+    <div class="form-group"><label>Estimated Amount (kr)</label><input id="fp-amount-estimate" type="number" placeholder="0"></div>
+    <div class="form-group"><label>Deadline</label><input id="fp-deadline" type="date"></div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="fp-status">
+        <option value="todo">Todo</option>
+        <option value="in_progress">In Progress</option>
+        <option value="submitted">Submitted</option>
+        <option value="skip">Skip</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Notes</label><textarea id="fp-notes"></textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="saveFundPipeline()">Gem</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-task">
+  <div class="modal">
+    <h2>Task</h2>
+    <input type="hidden" id="task-id">
+    <div class="form-group"><label>Title</label><input id="task-title" placeholder="Task title"></div>
+    <div class="form-group"><label>Assignee</label><input id="task-assignee" placeholder="Navn"></div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="task-status">
+        <option value="todo">Todo</option>
+        <option value="started">Started</option>
+        <option value="done">Done</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Priority</label>
+      <select id="task-priority">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Due Date</label><input id="task-due-date" type="date"></div>
+    <div class="form-group"><label>Notes</label><textarea id="task-notes"></textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="saveTask()">Gem</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-idea">
+  <div class="modal">
+    <h2>Idea</h2>
+    <input type="hidden" id="idea-id">
+    <div class="form-group"><label>Title</label><input id="idea-title" placeholder="Title"></div>
+    <div class="form-group"><label>Description</label><textarea id="idea-description"></textarea></div>
+    <div class="form-group"><label>Category</label><input id="idea-category" placeholder="e.g. aktivitet, samarbejde, funding"></div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="idea-status">
+        <option value="new">New</option>
+        <option value="exploring">Exploring</option>
+        <option value="approved">Approved</option>
+        <option value="dropped">Dropped</option>
+      </select>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="saveIdea()">Gem</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-event">
+  <div class="modal">
+    <h2>Event</h2>
+    <input type="hidden" id="event-id">
+    <div class="form-group"><label>Title</label><input id="event-title" placeholder="Event title"></div>
+    <div class="form-group"><label>Start Date</label><input id="event-date" type="date"></div>
+    <div class="form-group"><label>End Date</label><input id="event-end-date" type="date"></div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="event-category">
+        <option value="grant_deadline">Grant Deadline</option>
+        <option value="activity">Activity</option>
+        <option value="board">Board</option>
+        <option value="season">Season</option>
+        <option value="membership">Membership</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Description</label><textarea id="event-description"></textarea></div>
+    <div class="form-group">
+      <label>Recurring</label>
+      <select id="event-recurring">
+        <option value="">None</option>
+        <option value="yearly">Yearly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+    </div>
+    <div class="modal-actions"><button class="btn" onclick="saveEvent()">Gem</button></div>
+  </div>
+</div>
+
+<script>
+// ── helpers ────────────────────────────────────────────────────────────────
+const API = '/api';
+
+function badge(cls, txt) {
+  return `<span class="badge badge-${txt.toLowerCase().replace(' ', '_')}">${txt}</span>`;
+}
+
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay').forEach(el => el.classList.remove('open'));
+}
+
+function del(url, onOk) {
+  fetch(url, { method: 'DELETE' }).then(r => r.json()).then(onOk);
+}
+
+// ── tabs ────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    if (t.dataset.tab === 'dashboard') loadDashboard();
+    if (t.dataset.tab === 'arhjul') renderArhjul();
+  });
+});
+
+// ── FUNDRAISING ─────────────────────────────────────────────────────────────
+function loadFundraising() {
+  fetch(`${API}/fundraising`).then(r => r.json()).then(rows => {
+    const tb = document.getElementById('tb-fundraising');
+    tb.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.name}</td>
+        <td>${r.amount_applied ? r.amount_applied.toLocaleString() : '—'}</td>
+        <td>${r.amount_received ? r.amount_received.toLocaleString() : '—'}</td>
+        <td>${badge(r.status, r.status)}</td>
+        <td>${r.deadline || '—'}</td>
+        <td>${r.notes || ''}</td>
+        <td><button class="btn btn-sm" onclick="editFundraising(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="del('${API}/fundraising/${r.id}', loadFundraising)">🗑️</button></td>
+      </tr>`).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen fundraising — endnu</td></tr>';
+  });
+}
+
+function openFundraisingModal(row) {
+  document.getElementById('fr-id').value = row ? row.id : '';
+  document.getElementById('fr-name').value = row ? row.name : '';
+  document.getElementById('fr-amount-applied').value = row ? row.amount_applied || '' : '';
+  document.getElementById('fr-amount-received').value = row ? row.amount_received || '' : '';
+  document.getElementById('fr-status').value = row ? row.status : 'identified';
+  document.getElementById('fr-deadline').value = row ? row.deadline || '' : '';
+  document.getElementById('fr-notes').value = row ? row.notes || '' : '';
+  document.getElementById('modal-fundraising').classList.add('open');
+}
+
+function editFundraising(id) {
+  fetch(`${API}/fundraising`).then(r => r.json()).then(rows => {
+    openFundraisingModal(rows.find(r => r.id === id));
+  });
+}
+
+function saveFundraising() {
+  const id = document.getElementById('fr-id').value;
+  const payload = {
+    name: document.getElementById('fr-name').value,
+    amount_applied: parseInt(document.getElementById('fr-amount-applied').value) || null,
+    amount_received: parseInt(document.getElementById('fr-amount-received').value) || null,
+    status: document.getElementById('fr-status').value,
+    deadline: document.getElementById('fr-deadline').value || null,
+    notes: document.getElementById('fr-notes').value
+  };
+  const url = id ? `${API}/fundraising/${id}` : `${API}/fundraising`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); loadFundraising(); loadDashboard(); });
+}
+
+// ── FUND PIPELINE ───────────────────────────────────────────────────────────
+function loadFundPipeline() {
+  fetch(`${API}/fund-pipeline`).then(r => r.json()).then(rows => {
+    const tb = document.getElementById('tb-fund-pipeline');
+    tb.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.fund_name}</td>
+        <td>${r.amount_estimate ? r.amount_estimate.toLocaleString() : '—'}</td>
+        <td>${r.deadline || '—'}</td>
+        <td>${badge(r.status, r.status)}</td>
+        <td>${r.notes || ''}</td>
+        <td><button class="btn btn-sm" onclick="editFundPipeline(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="del('${API}/fund-pipeline/${r.id}', loadFundPipeline)">🗑️</button></td>
+      </tr>`).join('') : '<tr><td colspan="6" style="color:#666;text-align:center;padding:2rem;">Ingen fonde — endnu</td></tr>';
+  });
+}
+
+function openFundPipelineModal(row) {
+  document.getElementById('fp-id').value = row ? row.id : '';
+  document.getElementById('fp-fund-name').value = row ? row.fund_name : '';
+  document.getElementById('fp-description').value = row ? row.description || '' : '';
+  document.getElementById('fp-amount-estimate').value = row ? row.amount_estimate || '' : '';
+  document.getElementById('fp-deadline').value = row ? row.deadline || '' : '';
+  document.getElementById('fp-status').value = row ? row.status : 'todo';
+  document.getElementById('fp-notes').value = row ? row.notes || '' : '';
+  document.getElementById('modal-fund-pipeline').classList.add('open');
+}
+
+function editFundPipeline(id) {
+  fetch(`${API}/fund-pipeline`).then(r => r.json()).then(rows => {
+    openFundPipelineModal(rows.find(r => r.id === id));
+  });
+}
+
+function saveFundPipeline() {
+  const id = document.getElementById('fp-id').value;
+  const payload = {
+    fund_name: document.getElementById('fp-fund-name').value,
+    description: document.getElementById('fp-description').value,
+    amount_estimate: parseInt(document.getElementById('fp-amount-estimate').value) || null,
+    deadline: document.getElementById('fp-deadline').value || null,
+    status: document.getElementById('fp-status').value,
+    notes: document.getElementById('fp-notes').value
+  };
+  const url = id ? `${API}/fund-pipeline/${id}` : `${API}/fund-pipeline`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); loadFundPipeline(); loadDashboard(); });
+}
+
+// ── TASKS ────────────────────────────────────────────────────────────────────
+function loadTasks() {
+  fetch(`${API}/tasks`).then(r => r.json()).then(rows => {
+    const tb = document.getElementById('tb-tasks');
+    tb.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.title}</td>
+        <td>${r.assignee || '—'}</td>
+        <td>${badge(r.status, r.status)}</td>
+        <td class="priority-${r.priority}">${r.priority}</td>
+        <td>${r.due_date || '—'}</td>
+        <td>${r.notes || ''}</td>
+        <td><button class="btn btn-sm" onclick="editTask(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="del('${API}/tasks/${r.id}', loadTasks)">🗑️</button></td>
+      </tr>`).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen tasks — endnu</td></tr>';
+  });
+}
+
+function openTaskModal(row) {
+  document.getElementById('task-id').value = row ? row.id : '';
+  document.getElementById('task-title').value = row ? row.title : '';
+  document.getElementById('task-assignee').value = row ? row.assignee || '' : '';
+  document.getElementById('task-status').value = row ? row.status : 'todo';
+  document.getElementById('task-priority').value = row ? row.priority : 'medium';
+  document.getElementById('task-due-date').value = row ? row.due_date || '' : '';
+  document.getElementById('task-notes').value = row ? row.notes || '' : '';
+  document.getElementById('modal-task').classList.add('open');
+}
+
+function editTask(id) {
+  fetch(`${API}/tasks`).then(r => r.json()).then(rows => {
+    openTaskModal(rows.find(r => r.id === id));
+  });
+}
+
+function saveTask() {
+  const id = document.getElementById('task-id').value;
+  const payload = {
+    title: document.getElementById('task-title').value,
+    assignee: document.getElementById('task-assignee').value || null,
+    status: document.getElementById('task-status').value,
+    priority: document.getElementById('task-priority').value,
+    due_date: document.getElementById('task-due-date').value || null,
+    notes: document.getElementById('task-notes').value
+  };
+  const url = id ? `${API}/tasks/${id}` : `${API}/tasks`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); loadTasks(); loadDashboard(); });
+}
+
+// ── IDEAS ───────────────────────────────────────────────────────────────────
+function loadIdeas() {
+  fetch(`${API}/ideas`).then(r => r.json()).then(rows => {
+    const tb = document.getElementById('tb-ideas');
+    tb.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.title}</td>
+        <td>${r.category || '—'}</td>
+        <td>${badge(r.status, r.status)}</td>
+        <td>${r.description || ''}</td>
+        <td><button class="btn btn-sm" onclick="editIdea(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="del('${API}/ideas/${r.id}', loadIdeas)">🗑️</button></td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:#666;text-align:center;padding:2rem;">Ingen idéer — endnu</td></tr>';
+  });
+}
+
+function openIdeaModal(row) {
+  document.getElementById('idea-id').value = row ? row.id : '';
+  document.getElementById('idea-title').value = row ? row.title : '';
+  document.getElementById('idea-description').value = row ? row.description || '' : '';
+  document.getElementById('idea-category').value = row ? row.category || '' : '';
+  document.getElementById('idea-status').value = row ? row.status : 'new';
+  document.getElementById('modal-idea').classList.add('open');
+}
+
+function editIdea(id) {
+  fetch(`${API}/ideas`).then(r => r.json()).then(rows => {
+    openIdeaModal(rows.find(r => r.id === id));
+  });
+}
+
+function saveIdea() {
+  const id = document.getElementById('idea-id').value;
+  const payload = {
+    title: document.getElementById('idea-title').value,
+    description: document.getElementById('idea-description').value,
+    category: document.getElementById('idea-category').value || null,
+    status: document.getElementById('idea-status').value
+  };
+  const url = id ? `${API}/ideas/${id}` : `${API}/ideas`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); loadIdeas(); loadDashboard(); });
+}
+
+// ── ÅRSHJUL ──────────────────────────────────────────────────────────────────
+const MONTHS_DA = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
+const CATEGORY_COLORS = {
+  grant_deadline: 'dot-grant_deadline',
+  activity: 'dot-activity',
+  board: 'dot-board',
+  season: 'dot-season',
+  membership: 'dot-membership'
+};
+
+let eventsCache = [];
+
+function renderArhjul() {
+  loadEvents().then(events => {
+    eventsCache = events;
+    const grid = document.getElementById('year-grid');
+    grid.innerHTML = '';
+    for (let m = 0; m < 12; m++) {
+      const monthEvents = events.filter(e => {
+        if (!e.event_date) return false;
+        return new Date(e.event_date).getMonth() === m;
+      });
+      grid.innerHTML += `
+        <div class="month-col">
+          <h3>${MONTHS_DA[m]}</h3>
+          ${monthEvents.map(e => `
+            <div class="event-label" title="${e.description || ''}">
+              <span class="event-dot ${CATEGORY_COLORS[e.category] || ''}"></span>
+              ${e.title}
+            </div>`).join('')}
+          ${!monthEvents.length ? '<div style="color:#333;font-size:0.7rem;text-align:center;padding-top:0.5rem;">—</div>' : ''}
+        </div>`;
+    }
+  });
+}
+
+async function loadEvents() {
+  const r = await fetch(`${API}/events`);
+  return r.json();
+}
+
+function openEventModal(row) {
+  document.getElementById('event-id').value = row ? row.id : '';
+  document.getElementById('event-title').value = row ? row.title : '';
+  document.getElementById('event-date').value = row ? row.event_date || '' : '';
+  document.getElementById('event-end-date').value = row ? row.end_date || '' : '';
+  document.getElementById('event-category').value = row ? row.category || 'activity' : 'activity';
+  document.getElementById('event-description').value = row ? row.description || '' : '';
+  document.getElementById('event-recurring').value = row ? row.recurring || '' : '';
+  document.getElementById('modal-event').classList.add('open');
+}
+
+function saveEvent() {
+  const id = document.getElementById('event-id').value;
+  const payload = {
+    title: document.getElementById('event-title').value,
+    event_date: document.getElementById('event-date').value,
+    end_date: document.getElementById('event-end-date').value || null,
+    category: document.getElementById('event-category').value,
+    description: document.getElementById('event-description').value,
+    recurring: document.getElementById('event-recurring').value || null
+  };
+  const url = id ? `${API}/events/${id}` : `${API}/events`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); renderArhjul(); loadDashboard(); });
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+function loadDashboard() {
+  Promise.all([
+    fetch(`${API}/fundraising`).then(r => r.json()),
+    fetch(`${API}/fund-pipeline`).then(r => r.json()),
+    fetch(`${API}/tasks`).then(r => r.json()),
+    fetch(`${API}/ideas`).then(r => r.json()),
+    fetch(`${API}/events`).then(r => r.json())
+  ]).then(([fr, fp, tasks, ideas, events]) => {
+    const totalApplied = fr.reduce((s, r) => s + (r.amount_applied || 0), 0);
+    const totalReceived = fr.reduce((s, r) => s + (r.amount_received || 0), 0);
+    const pendingPipeline = fp.filter(r => ['todo','in_progress'].includes(r.status)).length;
+    const openTasks = tasks.filter(r => r.status !== 'done').length;
+
+    document.getElementById('stats').innerHTML = `
+      <div class="stat-card"><div class="label">Ansøgt i alt</div><div class="value">${totalApplied.toLocaleString()} kr</div></div>
+      <div class="stat-card"><div class="label">Modtaget</div><div class="value">${totalReceived.toLocaleString()} kr</div></div>
+      <div class="stat-card"><div class="label">Fonde i pipeline</div><div class="value">${pendingPipeline}</div></div>
+      <div class="stat-card"><div class="label">Åbne tasks</div><div class="value">${openTasks}</div></div>
+      <div class="stat-card"><div class="label">Idéer</div><div class="value">${ideas.length}</div></div>
+      <div class="stat-card"><div class="label">Events i år</div><div class="value">${events.length}</div></div>
+    `;
+  });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>
