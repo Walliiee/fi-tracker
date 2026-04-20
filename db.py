@@ -1,7 +1,7 @@
 import sqlite3
 import os
 
-DATABASE = os.path.join(os.path.dirname(__file__), 'data', 'fi_tracker.db')
+DATABASE = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(__file__), 'data', 'fi_tracker.db'))
 
 def get_db():
     conn = sqlite3.connect(DATABASE)

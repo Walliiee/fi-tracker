@@ -472,6 +472,8 @@ def generate_report():
     from datetime import datetime, timedelta
     import urllib.request, urllib.error, json
 
+    OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
+
     data = request.json or {}
     today = datetime.now().date()
     default_from = (today - timedelta(days=30)).isoformat()
@@ -571,7 +573,7 @@ Skriv et kort resume pa 3-5 punkter pa dansk. Vaer konkret, ikke generisk. Naevn
 
     try:
         req = urllib.request.Request(
-            'http://localhost:11434/api/generate',
+            f'{OLLAMA_URL}/api/generate',
             data=json.dumps({'model': 'minimax-m2.7:cloud', 'prompt': prompt, 'stream': False}).encode('utf-8'),
             headers={'Content-Type': 'application/json'},
             method='POST'
