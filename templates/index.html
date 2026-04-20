@@ -27,20 +27,38 @@
 </head>
 <body>
 
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Mobile menu overlay -->
+<div id="mobile-menu-overlay" class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
+
 <header>
   <h1>🐺 fi-tracker</h1>
   <span class="subtitle">Familieidræt</span>
+  <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Menu">☰</button>
 </header>
 
 <!-- tabs -->
-<div class="tabs">
-  <div class="tab active" data-tab="dashboard" data-title="Dashboard">Dashboard</div>
-  <div class="tab" data-tab="fundraising" data-title="Fundraising">Fundraising</div>
-  <div class="tab" data-tab="fund-pipeline" data-title="Fund Pipeline">Fund Pipeline</div>
-  <div class="tab" data-tab="tasks" data-title="Tasks">Tasks</div>
-  <div class="tab" data-tab="ideas" data-title="Ideas">Ideas</div>
-  <div class="tab" data-tab="arhjul" data-title="Årshjul">Årshjul</div>
-  <div class="tab" data-tab="comms" data-title="Communications">Communications</div>
+<div class="tabs" id="main-tabs">
+  <div class="tab active" data-tab="dashboard" data-title="Dashboard" data-idx="1">Dashboard</div>
+  <div class="tab" data-tab="fundraising" data-title="Fundraising" data-idx="2">Fundraising</div>
+  <div class="tab" data-tab="fund-pipeline" data-title="Fund Pipeline" data-idx="3">Fund Pipeline</div>
+  <div class="tab" data-tab="tasks" data-title="Tasks" data-idx="4">Tasks</div>
+  <div class="tab" data-tab="ideas" data-title="Ideas" data-idx="5">Ideas</div>
+  <div class="tab" data-tab="arhjul" data-title="Årshjul" data-idx="6">Årshjul</div>
+  <div class="tab" data-tab="comms" data-title="Communications" data-idx="7">Communications</div>
+</div>
+
+<!-- Mobile dropdown menu -->
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-item active" onclick="switchTab('dashboard'); toggleMobileMenu()">Dashboard</div>
+  <div class="mobile-menu-item" onclick="switchTab('fundraising'); toggleMobileMenu()">Fundraising</div>
+  <div class="mobile-menu-item" onclick="switchTab('fund-pipeline'); toggleMobileMenu()">Fund Pipeline</div>
+  <div class="mobile-menu-item" onclick="switchTab('tasks'); toggleMobileMenu()">Tasks</div>
+  <div class="mobile-menu-item" onclick="switchTab('ideas'); toggleMobileMenu()">Ideas</div>
+  <div class="mobile-menu-item" onclick="switchTab('arhjul'); toggleMobileMenu()">Årshjul</div>
+  <div class="mobile-menu-item" onclick="switchTab('comms'); toggleMobileMenu()">Communications</div>
 </div>
 
 <!-- Dashboard -->
@@ -408,7 +426,19 @@ function closeAllModals() {
 }
 
 function del(url, onOk) {
-  fetch(url, { method: 'DELETE' }).then(r => r.json()).then(onOk);
+  fetch(url, { method: 'DELETE' })
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(data => {
+      showToast('Slettet!', 'success');
+      if (onOk) onOk(data);
+    })
+    .catch(err => {
+      showToast('Kunne ikke slette. Prøv igen.', 'error');
+      console.error('del:', err);
+    });
 }
 
 function switchTab(tabName) {
@@ -469,12 +499,33 @@ document.querySelectorAll('.sub-tab').forEach(st => {
 // ── FUNDRAISING ─────────────────────────────────────────────────────────────
 let fundraisingCache = [];
 
-function loadFundraising() {
-  fetch(`${API}/fundraising`).then(r => r.json()).then(rows => {
+async function loadFundraising() {
+  try {
+    showLoading('kanban-identified');
+    showLoading('kanban-applied');
+    showLoading('kanban-received');
+    showLoading('kanban-rejected');
+    
+    const r = await fetch(`${API}/fundraising`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = await r.json();
+    
     fundraisingCache = rows;
     renderFundraisingKanban(rows);
     renderFundraisingSummary(rows);
-  });
+    
+    // Check if empty for empty state on panel
+    if (rows.length === 0) {
+      document.getElementById('panel-fundraising').querySelector('.fundraising-summary').insertAdjacentHTML('beforebegin', 
+        '<div id="fundraising-empty" class="empty-state-box">💰 Ingen tilskud registreret. Klik på + i en kolonne for at tilføje den første ansøgning.</div>');
+    } else {
+      const emptyEl = document.getElementById('fundraising-empty');
+      if (emptyEl) emptyEl.remove();
+    }
+  } catch (err) {
+    showToast('Kunne ikke indlæse fundraising data. Prøv igen.', 'error');
+    console.error('loadFundraising:', err);
+  }
 }
 
 function renderFundraisingSummary(rows) {
@@ -560,18 +611,45 @@ function saveFundraising() {
   };
   const url = id ? `${API}/fundraising/${id}` : `${API}/fundraising`;
   const method = id ? 'PUT' : 'POST';
+  
   fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-    .then(r => { closeAllModals(); loadFundraising(); loadDashboard(); });
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(() => {
+      closeAllModals();
+      showToast(id ? 'Gemt!' : 'Tilføjet!', 'success');
+      loadFundraising();
+      loadDashboard();
+    })
+    .catch(err => {
+      showToast('Kunne ikke gemme. Prøv igen.', 'error');
+      console.error('saveFundraising:', err);
+    });
 }
 
 // ── FUND PIPELINE ────────────────────────────────────────────────────────────
-function loadFundPipeline() {
-  fetch(`${API}/fund-pipeline`).then(r => r.json()).then(rows => {
+async function loadFundPipeline() {
+  try {
+    document.getElementById('tb-fund-pipeline').innerHTML = '<tr><td colspan="6" class="loading-cell"><div class="spinner"></div> Indlæser...</td></tr>';
+    
+    const r = await fetch(`${API}/fund-pipeline`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = await r.json();
+    
     const tb = document.getElementById('tb-fund-pipeline');
     const today = new Date().toISOString().slice(0,10);
     const in14 = new Date(Date.now() + 14*86400000).toISOString().slice(0,10);
     const fpStatusColors = {todo:'grey',in_progress:'#5ba0e0',submitted:'#e0c060',approved:'#60cc80',rejected:'#cc6060',skip:'#666'};
-    tb.innerHTML = rows.length ? rows.map(r => {
+    
+    if (rows.length === 0) {
+      tb.innerHTML = '<div class="empty-state-box">📋 Ingen fonde i pipelinen. Klik "+ Add" for at registrere en fond.</div>';
+      document.getElementById('tf-fund-pipeline').innerHTML = '';
+      return;
+    }
+    
+    tb.innerHTML = rows.map(r => {
       const dlOverdue = r.deadline && r.deadline < today;
       const dlSoon = !dlOverdue && r.deadline && r.deadline <= in14;
       const dlClass = dlOverdue ? 'deadline-overdue' : (dlSoon ? 'deadline-soon' : '');
@@ -585,11 +663,14 @@ function loadFundPipeline() {
         <td><button class="btn btn-sm" onclick="event.stopPropagation();editFundPipeline(${r.id})">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();del('${API}/fund-pipeline/${r.id}', loadFundPipeline)">🗑️</button></td>
       </tr>`;
-    }).join('') : '<tr><td colspan="6" style="color:#666;text-align:center;padding:2rem;">Ingen fonde — endnu</td></tr>';
+    }).join('');
     // Total row
     const total = rows.filter(r => r.status !== 'rejected' && r.status !== 'skip').reduce((s, r) => s + (r.amount_estimate || 0), 0);
     document.getElementById('tf-fund-pipeline').innerHTML = `<tr style="border-top:2px solid #2a2d3a;font-weight:700"><td>Total (excl. rejected)</td><td>${total.toLocaleString()} kr</td><td colspan="4"></td></tr>`;
-  });
+  } catch (err) {
+    showToast('Kunne ikke indlæse fond pipeline. Prøv igen.', 'error');
+    console.error('loadFundPipeline:', err);
+  }
 }
 
 function openFundPipelineModal(row) {
@@ -626,9 +707,15 @@ function saveFundPipeline() {
 }
 
 // ── TASKS ────────────────────────────────────────────────────────────────────
-function loadTasks() {
-  const filterAssignee = document.getElementById('task-assignee-filter').value;
-  fetch(`${API}/tasks`).then(r => r.json()).then(rows => {
+async function loadTasks() {
+  try {
+    document.getElementById('tb-tasks').innerHTML = '<tr><td colspan="7" class="loading-cell"><div class="spinner"></div> Indlæser...</td></tr>';
+    
+    const filterAssignee = document.getElementById('task-assignee-filter').value;
+    const r = await fetch(`${API}/tasks`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let rows = await r.json();
+    
     // Sort by deadline ascending (nulls last)
     rows.sort((a, b) => {
       if (!a.due_date && !b.due_date) return 0;
@@ -641,7 +728,7 @@ function loadTasks() {
     const assignees = [...new Set(rows.filter(r => r.assignee).map(r => r.assignee))].sort();
     const filterSelect = document.getElementById('task-assignee-filter');
     const currentVal = filterSelect.value;
-    filterSelect.innerHTML = '<option value="">All assignees</option>' +
+    filterSelect.innerHTML = '<option value="">Alle assignees</option>' +
       assignees.map(a => `<option value="${a}">${a}</option>`).join('');
     filterSelect.value = currentVal;
 
@@ -652,7 +739,13 @@ function loadTasks() {
 
     const today = new Date().toISOString().slice(0, 10);
     const tb = document.getElementById('tb-tasks');
-    tb.innerHTML = rows.length ? rows.map(r => {
+    
+    if (rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="7" style="padding: 0;"><div class="empty-state-box">✅ Ingen opgaver endnu. Klik "+ Add" for at tilføje den første opgave.</div></td></tr>';
+      return;
+    }
+    
+    tb.innerHTML = rows.map(r => {
       const isOverdue = r.due_date && r.due_date < today && r.status !== 'done';
       const overdueClass = isOverdue ? 'task-overdue' : '';
       return `<tr class="${overdueClass}">
@@ -665,8 +758,11 @@ function loadTasks() {
         <td><button class="btn btn-sm" onclick="editTask(${r.id})">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="del('${API}/tasks/${r.id}', loadTasks)">🗑️</button></td>
       </tr>`;
-    }).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen tasks — endnu</td></tr>';
-  });
+    }).join('');
+  } catch (err) {
+    showToast('Kunne ikke indlæse opgaver. Prøv igen.', 'error');
+    console.error('loadTasks:', err);
+  }
 }
 
 function openTaskModal(row) {
@@ -714,9 +810,14 @@ function hashColor(str) {
 }
 
 function loadIdeas() {
+  document.getElementById('ideas-cards').innerHTML = '<div class="loading-spinner"><div class="spinner"></div> Indlæser...</div>';
+  
   fetch(`${API}/ideas`).then(r => r.json()).then(rows => {
     ideasCache = rows;
     renderIdeas();
+  }).catch(err => {
+    showToast('Kunne ikke indlæse idéer. Prøv igen.', 'error');
+    console.error('loadIdeas:', err);
   });
 }
 
@@ -734,7 +835,13 @@ function renderIdeas() {
 
   const ideaStatusColors = {new:'#aaa',discussed:'#e0c060',approved:'#60cc80',archived:'#666'};
   const container = document.getElementById('ideas-cards');
-  container.innerHTML = rows.length ? rows.map(r => {
+  
+  if (rows.length === 0) {
+    container.innerHTML = '<div class="empty-state-box">💡 Ingen idéer endnu. Del en idé med holdet ved at klikke "+ Add".</div>';
+    return;
+  }
+  
+  container.innerHTML = rows.map(r => {
     const tags = (r.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
     const sc = ideaStatusColors[r.status] || '#888';
     return `<div class="idea-card">
@@ -758,7 +865,7 @@ function renderIdeas() {
         </div>
       </div>
     </div>`;
-  }).join('') : '<div class="empty-state">Ingen idéer — endnu</div>';
+  }).join('');
 }
 
 function toggleTagFilter(tag) {
@@ -830,18 +937,27 @@ const CATEGORY_LABELS = {
 let eventsCache = [];
 let dashboardDataCache = null;
 
-function renderArhjul() {
-  // Legend
-  const legend = document.getElementById('category-legend');
-  legend.innerHTML = Object.entries(CATEGORY_LABELS).map(([k,v]) =>
-    `<span class="legend-item"><span class="legend-dot" style="background:${CATEGORY_COLORS[k]}"></span>${v}</span>`
-  ).join('');
+async function renderArhjul() {
+  try {
+    // Legend
+    const legend = document.getElementById('category-legend');
+    legend.innerHTML = Object.entries(CATEGORY_LABELS).map(([k,v]) =>
+      `<span class="legend-item"><span class="legend-dot" style="background:${CATEGORY_COLORS[k]}"></span>${v}</span>`
+    ).join('');
 
-  loadEvents().then(events => {
+    document.getElementById('year-grid').innerHTML = '<div class="loading-spinner"><div class="spinner"></div> Indlæser kalender...</div>';
+    
+    const events = await loadEvents();
     eventsCache = events;
     renderNext30Banner();
     const grid = document.getElementById('year-grid');
     grid.innerHTML = '';
+    
+    if (events.length === 0) {
+      grid.innerHTML = '<div class="empty-state-box" style="grid-column: span 4;">📅 Kalenderen er tom. Tilføj begivenheder for at se årshjulet.</div>';
+      return;
+    }
+    
     for (let m = 0; m < 12; m++) {
       const monthEvents = events.filter(e => {
         if (!e.event_date) return false;
@@ -873,7 +989,10 @@ function renderArhjul() {
           ${!monthEvents.length ? '<div style="color:#333;font-size:0.7rem;text-align:center;padding-top:0.5rem;">—</div>' : ''}
         </div>`;
     }
-  });
+  } catch (err) {
+    showToast('Kunne ikke indlæse kalenderen. Prøv igen.', 'error');
+    console.error('renderArhjul:', err);
+  }
 }
 
 function renderNext30Banner() {
@@ -1294,8 +1413,98 @@ function generateReport() {
   if (fromInput) fromInput.value = fmt(thirtyDaysAgo);
 })();
 
+// ── TOAST NOTIFICATIONS ───────────────────────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-fade');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ── LOADING STATES ────────────────────────────────────────────────────────────
+function showLoading(elId) {
+  const el = document.getElementById(elId);
+  if (el) el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><span>Indlæser...</span></div>';
+}
+
+// ── MOBILE MENU ───────────────────────────────────────────────────────────────
+function toggleMobileMenu() {
+  const menu = document.getElementById('mobile-menu');
+  const overlay = document.getElementById('mobile-menu-overlay');
+  menu.classList.toggle('open');
+  overlay.classList.toggle('open');
+}
+
+// ── EMPTY STATES ─────────────────────────────────────────────────────────────
+const EMPTY_STATES = {
+  'panel-dashboard': '<div class="empty-state-box">🐺 Velkommen til fi-tracker! Dashboardet viser overblik over opgaver, deadlines og fundraising.</div>',
+  'panel-fundraising': '<div class="empty-state-box">💰 Ingen tilskud registreret. Klik på + i en kolonne for at tilføje den første ansøgning.</div>',
+  'panel-fund-pipeline': '<div class="empty-state-box">📋 Ingen fonde i pipelinen. Klik "+ Add" for at registrere en fond.</div>',
+  'panel-tasks': '<div class="empty-state-box">✅ Ingen opgaver endnu. Klik "+ Add" for at tilføje den første opgave.</div>',
+  'panel-ideas': '<div class="empty-state-box">💡 Ingen idéer endnu. Del en idé med holdet ved at klikke "+ Add".</div>',
+  'panel-arhjul': '<div class="empty-state-box">📅 Kalenderen er tom. Tilføj begivenheder for at se årshjulet.</div>',
+  'panel-comms': '<div class="empty-state-box">📢 Ingen indholdsplan endnu. Tilføj opslag eller se events der mangler kommunikation.</div>'
+};
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  // Don't trigger when typing in inputs
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') {
+      closeAllModals();
+      e.target.blur();
+    }
+    return;
+  }
+
+  // Number keys 1-7 for tab switching
+  if (e.key >= '1' && e.key <= '7' && !e.ctrlKey && !e.metaKey) {
+    const tabIdx = parseInt(e.key);
+    const tab = document.querySelector(`.tab[data-idx="${tabIdx}"]`);
+    if (tab) {
+      const tabName = tab.dataset.tab;
+      switchTab(tabName);
+    }
+  }
+
+  // N for new item
+  if (e.key === 'n' || e.key === 'N') {
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) {
+      const tab = activeTab.dataset.tab;
+      if (tab === 'dashboard') return; // No add on dashboard
+      if (tab === 'fundraising') openFundraisingModal(null, 'identified');
+      if (tab === 'fund-pipeline') openFundPipelineModal();
+      if (tab === 'tasks') openTaskModal();
+      if (tab === 'ideas') openIdeaModal();
+      if (tab === 'arhjul') openEventModal();
+      if (tab === 'comms') openContentPostModal();
+    }
+  }
+
+  // Escape to close modals
+  if (e.key === 'Escape') {
+    closeAllModals();
+    // Also close mobile menu if open
+    const mobileMenu = document.getElementById('mobile-menu');
+    if (mobileMenu && mobileMenu.classList.contains('open')) {
+      toggleMobileMenu();
+    }
+  }
+});
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 loadDashboard();
 </script>
+
+<footer class="page-footer">
+  fi-tracker v1.0 · Familieidræt · Built with ❤️
+</footer>
+
 </body>
 </html>

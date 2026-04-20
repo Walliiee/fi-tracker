@@ -542,13 +542,174 @@ tr.task-overdue td {
 .cp-badge-scheduled { background: #1e3a5f; color: #5ba0e0; }
 .cp-badge-posted { background: #1e4a2a; color: #60cc80; }
 
-@media (max-width: 700px) {
-  .year-grid { grid-template-columns: repeat(2, 1fr); }
-  .tabs { padding: 0 0.5rem; }
-  .tab { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
-  .banner-chips { max-height: 120px; overflow-y: auto; }
-  .kanban-board { flex-direction: column; }
-  .ideas-cards { grid-template-columns: 1fr; }
+/* Toast notifications */
+#toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.toast {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  min-width: 250px;
+  animation: toast-in 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.toast-success {
+  border-left: 3px solid #60cc80;
+}
+
+.toast-error {
+  border-left: 3px solid #cc6060;
+}
+
+.toast-info {
+  border-left: 3px solid #5ba0e0;
+}
+
+.toast-fade {
+  animation: toast-out 0.3s ease forwards;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(100%); }
+}
+
+/* Mobile menu */
+.mobile-menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.mobile-menu-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99;
+}
+
+.mobile-menu-overlay.open {
+  display: block;
+}
+
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: 60px;
+  right: 0;
+  width: 200px;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  z-index: 100;
+  padding: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.mobile-menu.open {
+  display: block;
+}
+
+.mobile-menu-item {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  color: #888;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.mobile-menu-item:hover {
+  background: #2a2d3a;
+  color: #e0e0e0;
+}
+
+.mobile-menu-item.active {
+  color: #fff;
+  background: #2a2d3a;
+  font-weight: 600;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.loading-cell {
+  text-align: center;
+  padding: 2rem !important;
+  color: #888;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #2a2d3a;
+  border-top-color: #6c63ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Empty state boxes */
+.empty-state-box {
+  background: #1a1d27;
+  border: 2px dashed #2a2d3a;
+  border-radius: 10px;
+  padding: 2rem;
+  text-align: center;
+  color: #888;
+  font-size: 0.9rem;
+  margin: 1rem 0;
+}
+
+/* Page footer */
+.page-footer {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-size: 0.8rem;
+  border-top: 1px solid #2a2d3a;
+  margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: block;
+  }
+  .tabs {
+    display: none;
+  }
 }
 
 /* Fundraising Summary Bar */
