@@ -281,6 +281,96 @@ def get_content_posts_by_event(event_id):
     conn.close()
     return jsonify([dict(r) for r in rows])
 
+# ── dashboard ─────────────────────────────────────────────────────────────────
+@app.route('/api/dashboard', methods=['GET'])
+def get_dashboard():
+    from datetime import datetime, timedelta
+    conn = db_module.get_db()
+    today = datetime.now().date()
+    future_60 = today + timedelta(days=60)
+    future_30 = today + timedelta(days=30)
+
+    # 1. Open Tasks — count + 3 most urgent
+    tasks = conn.execute('SELECT * FROM tasks WHERE status != "done" ORDER BY due_date ASC NULLS LAST, created_at ASC').fetchall()
+    open_tasks_count = len(tasks)
+    urgent_tasks = [dict(r) for r in tasks[:3]]
+
+    # 2. Upcoming Deadlines — next 5 årshjul events within 60 days
+    events = conn.execute(
+        'SELECT * FROM events WHERE event_date >= ? AND event_date <= ? ORDER BY event_date ASC LIMIT 5',
+        (today.isoformat(), future_60.isoformat())
+    ).fetchall()
+    upcoming_events = [dict(r) for r in events]
+
+    # 3. Fundraising Totals
+    fr_sums = conn.execute(
+        'SELECT SUM(amount_received) as total_received, SUM(amount_applied) as total_applied FROM fundraising'
+    ).fetchone()
+    total_received = fr_sums['total_received'] or 0
+    total_applied = fr_sums['total_applied'] or 0
+
+    # 4. Posts Due — events with needs_comms=1 but no linked post
+    needs_comms_events = conn.execute('SELECT id FROM events WHERE needs_comms = 1').fetchall()
+    needs_comms_ids = [r['id'] for r in needs_comms_events]
+    posts_due = 0
+    if needs_comms_ids:
+        placeholders = ','.join('?' for _ in needs_comms_ids)
+        linked_event_ids = conn.execute(
+            f'SELECT DISTINCT event_id FROM content_posts WHERE event_id IN ({placeholders})',
+            needs_comms_ids
+        ).fetchall()
+        linked_ids = set(r['event_id'] for r in linked_event_ids if r['event_id'])
+        posts_due = len(set(needs_comms_ids) - linked_ids)
+
+    # 5. Recent Activity — last 5 items from all modules
+    recent = []
+    # Tasks
+    task_rows = conn.execute('SELECT id, title, created_at, "task" as module FROM tasks ORDER BY created_at DESC LIMIT 5').fetchall()
+    recent.extend([dict(r) for r in task_rows])
+    # Fundraising
+    fr_rows = conn.execute('SELECT id, name as title, created_at, "fundraising" as module FROM fundraising ORDER BY created_at DESC LIMIT 5').fetchall()
+    recent.extend([dict(r) for r in fr_rows])
+    # Ideas
+    idea_rows = conn.execute('SELECT id, title, created_at, "idea" as module FROM ideas ORDER BY created_at DESC LIMIT 5').fetchall()
+    recent.extend([dict(r) for r in idea_rows])
+    # Content Posts
+    post_rows = conn.execute('SELECT id, title, created_at, "post" as module FROM content_posts ORDER BY created_at DESC LIMIT 5').fetchall()
+    recent.extend([dict(r) for r in post_rows])
+    # Events
+    event_rows = conn.execute('SELECT id, title, created_at, "event" as module FROM events ORDER BY created_at DESC LIMIT 5').fetchall()
+    recent.extend([dict(r) for r in event_rows])
+
+    # Sort by created_at desc and take top 5
+    recent.sort(key=lambda x: x['created_at'] or '', reverse=True)
+    recent = recent[:5]
+
+    # Next 30 days banner events
+    next_30_events = conn.execute(
+        'SELECT * FROM events WHERE event_date >= ? AND event_date <= ? ORDER BY event_date ASC',
+        (today.isoformat(), future_30.isoformat())
+    ).fetchall()
+    next_30 = [dict(r) for r in next_30_events]
+
+    conn.close()
+
+    return jsonify({
+        'open_tasks': {
+            'count': open_tasks_count,
+            'urgent': urgent_tasks
+        },
+        'upcoming_events': {
+            'count': len(upcoming_events),
+            'events': upcoming_events
+        },
+        'fundraising': {
+            'total_received': total_received,
+            'total_applied': total_applied
+        },
+        'posts_due': posts_due,
+        'recent_activity': recent,
+        'next_30_days': next_30
+    })
+
 # ── static files ───────────────────────────────────────────────────────────────
 @app.route('/')
 def index():

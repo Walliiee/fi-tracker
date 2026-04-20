@@ -15,20 +15,22 @@
 
 <!-- tabs -->
 <div class="tabs">
-  <div class="tab active" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="fundraising">Fundraising</div>
-  <div class="tab" data-tab="fund-pipeline">Fund Pipeline</div>
-  <div class="tab" data-tab="tasks">Tasks</div>
-  <div class="tab" data-tab="ideas">Ideas</div>
-  <div class="tab" data-tab="arhjul">Årshjul</div>
-  <div class="tab" data-tab="comms">Communications</div>
+  <div class="tab active" data-tab="dashboard" data-title="Dashboard">Dashboard</div>
+  <div class="tab" data-tab="fundraising" data-title="Fundraising">Fundraising</div>
+  <div class="tab" data-tab="fund-pipeline" data-title="Fund Pipeline">Fund Pipeline</div>
+  <div class="tab" data-tab="tasks" data-title="Tasks">Tasks</div>
+  <div class="tab" data-tab="ideas" data-title="Ideas">Ideas</div>
+  <div class="tab" data-tab="arhjul" data-title="Årshjul">Årshjul</div>
+  <div class="tab" data-tab="comms" data-title="Communications">Communications</div>
 </div>
 
 <!-- Dashboard -->
 <div class="panel active" id="panel-dashboard">
-  <div class="stats" id="stats"></div>
-  <h2 style="margin-bottom:0.75rem;font-size:0.9rem;color:#888;">Senaste poster</h2>
-  <div id="recent-tables"></div>
+  <div class="dashboard-grid" id="dashboard-grid">
+    <!-- Cards will be populated by JS -->
+  </div>
+  <h2 style="margin: 1.5rem 0 0.75rem;font-size:1rem;color:#aaa;">Recent Activity</h2>
+  <div class="recent-activity" id="recent-activity"></div>
 </div>
 
 <!-- Fundraising -->
@@ -61,9 +63,15 @@
 
 <!-- Tasks -->
 <div class="panel" id="panel-tasks">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
     <h2>Tasks</h2>
-    <button class="btn" onclick="openTaskModal()">+ Add</button>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <label style="color:#888;font-size:0.85rem;">Filter:</label>
+      <select id="task-assignee-filter" class="form-select" onchange="loadTasks()">
+        <option value="">All assignees</option>
+      </select>
+      <button class="btn" onclick="openTaskModal()">+ Add</button>
+    </div>
   </div>
   <table>
     <thead><tr>
@@ -89,6 +97,11 @@
 
 <!-- Årshjul -->
 <div class="panel" id="panel-arhjul">
+  <!-- Next 30 days banner -->
+  <div class="next-30-banner" id="next-30-banner" style="display:none;">
+    <div class="banner-label">📅 Next 30 Days</div>
+    <div class="banner-chips" id="next-30-chips"></div>
+  </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
     <h2>Årshjul — Annual Calendar</h2>
     <button class="btn" onclick="openEventModal()">+ Add Event</button>
@@ -100,6 +113,11 @@
 
 <!-- Communications -->
 <div class="panel" id="panel-comms">
+  <!-- Needs Comms Alert -->
+  <div class="needs-comms-alert" id="needs-comms-alert" style="display:none;">
+    <span id="needs-comms-text"></span>
+    <button class="btn btn-sm" onclick="switchTab('arhjul')">View Events</button>
+  </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
     <h2>Communications</h2>
     <button class="btn" onclick="openContentPostModal()">+ Add Post</button>
@@ -216,7 +234,7 @@
     <input type="hidden" id="event-id">
     <div class="form-group"><label>Title</label><input id="event-title" placeholder="Event title"></div>
     <div class="form-group"><label>Start Date</label><input id="event-date" type="date"></div>
-    <div class="form-group"><label>End Date</label><input id="event-end-date" type="date"></div>
+    <div class="form-group"><label>End Date (optional)</label><input id="event-end-date" type="date"></div>
     <div class="form-group">
       <label>Category</label>
       <select id="event-category">
@@ -234,8 +252,8 @@
       <label>Recurring</label>
       <select id="event-recurring"><option value="">None</option><option value="yearly">Yearly</option><option value="monthly">Monthly</option></select>
     </div>
-    <div class="form-group">
-      <label><input type="checkbox" id="event-needs-comms"> Needs Communications</label>
+    <div class="form-group checkbox-group">
+      <label class="checkbox-label"><input type="checkbox" id="event-needs-comms"> Needs Communications</label>
     </div>
     <div class="modal-actions"><button class="btn" onclick="saveEvent()">Gem</button></div>
   </div>
@@ -314,6 +332,28 @@ function del(url, onOk) {
   fetch(url, { method: 'DELETE' }).then(r => r.json()).then(onOk);
 }
 
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (tab) {
+    tab.classList.add('active');
+    document.getElementById('panel-' + tabName).classList.add('active');
+    updatePageTitle(tab.dataset.title || 'fi-tracker');
+  }
+  if (tabName === 'dashboard') loadDashboard();
+  if (tabName === 'arhjul') renderArhjul();
+  if (tabName === 'comms') { renderContentCalendar(); renderPostLog(); }
+  if (tabName === 'tasks') loadTasks();
+  if (tabName === 'fundraising') loadFundraising();
+  if (tabName === 'fund-pipeline') loadFundPipeline();
+  if (tabName === 'ideas') loadIdeas();
+}
+
+function updatePageTitle(title) {
+  document.title = title ? `${title} — fi-tracker` : 'fi-tracker — Familieidræt';
+}
+
 // Close modals on overlay click
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) closeAllModals();
@@ -326,9 +366,14 @@ document.querySelectorAll('.tab').forEach(t => {
     document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+    updatePageTitle(t.dataset.title || 'fi-tracker');
     if (t.dataset.tab === 'dashboard') loadDashboard();
     if (t.dataset.tab === 'arhjul') renderArhjul();
     if (t.dataset.tab === 'comms') { renderContentCalendar(); renderPostLog(); }
+    if (t.dataset.tab === 'tasks') loadTasks();
+    if (t.dataset.tab === 'fundraising') loadFundraising();
+    if (t.dataset.tab === 'fund-pipeline') loadFundPipeline();
+    if (t.dataset.tab === 'ideas') loadIdeas();
   });
 });
 
@@ -393,7 +438,7 @@ function saveFundraising() {
     .then(r => { closeAllModals(); loadFundraising(); loadDashboard(); });
 }
 
-// ── FUND PIPELINE ───────────────────────────────────────────────────────────
+// ── FUND PIPELINE ────────────────────────────────────────────────────────────
 function loadFundPipeline() {
   fetch(`${API}/fund-pipeline`).then(r => r.json()).then(rows => {
     const tb = document.getElementById('tb-fund-pipeline');
@@ -413,7 +458,7 @@ function loadFundPipeline() {
 function openFundPipelineModal(row) {
   document.getElementById('fp-id').value = row ? row.id : '';
   document.getElementById('fp-fund-name').value = row ? row.fund_name : '';
-  document.getElementById('fp-description').value = row ? row.description || '' : '';
+  document.getElementById('fp-description').value = row ? r.description || '' : '';
   document.getElementById('fp-amount-estimate').value = row ? row.amount_estimate || '' : '';
   document.getElementById('fp-deadline').value = row ? row.deadline || '' : '';
   document.getElementById('fp-status').value = row ? row.status : 'todo';
@@ -445,19 +490,45 @@ function saveFundPipeline() {
 
 // ── TASKS ────────────────────────────────────────────────────────────────────
 function loadTasks() {
+  const filterAssignee = document.getElementById('task-assignee-filter').value;
   fetch(`${API}/tasks`).then(r => r.json()).then(rows => {
+    // Sort by deadline ascending (nulls last)
+    rows.sort((a, b) => {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    });
+
+    // Update assignee filter options
+    const assignees = [...new Set(rows.filter(r => r.assignee).map(r => r.assignee))].sort();
+    const filterSelect = document.getElementById('task-assignee-filter');
+    const currentVal = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">All assignees</option>' +
+      assignees.map(a => `<option value="${a}">${a}</option>`).join('');
+    filterSelect.value = currentVal;
+
+    // Filter
+    if (filterAssignee) {
+      rows = rows.filter(r => r.assignee === filterAssignee);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
     const tb = document.getElementById('tb-tasks');
-    tb.innerHTML = rows.length ? rows.map(r => `
-      <tr>
+    tb.innerHTML = rows.length ? rows.map(r => {
+      const isOverdue = r.due_date && r.due_date < today && r.status !== 'done';
+      const overdueClass = isOverdue ? 'task-overdue' : '';
+      return `<tr class="${overdueClass}">
         <td>${r.title}</td>
         <td>${r.assignee || '—'}</td>
         <td>${badge(r.status, r.status)}</td>
         <td class="priority-${r.priority}">${r.priority}</td>
-        <td>${r.due_date || '—'}</td>
+        <td>${r.due_date || '—'}${isOverdue ? ' ⚠️' : ''}</td>
         <td>${r.notes || ''}</td>
         <td><button class="btn btn-sm" onclick="editTask(${r.id})">✏️</button>
             <button class="btn btn-sm btn-danger" onclick="del('${API}/tasks/${r.id}', loadTasks)">🗑️</button></td>
-      </tr>`).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen tasks — endnu</td></tr>';
+      </tr>`;
+    }).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen tasks — endnu</td></tr>';
   });
 }
 
@@ -561,6 +632,7 @@ const CATEGORY_LABELS = {
 };
 
 let eventsCache = [];
+let dashboardDataCache = null;
 
 function renderArhjul() {
   // Legend
@@ -571,13 +643,13 @@ function renderArhjul() {
 
   loadEvents().then(events => {
     eventsCache = events;
+    renderNext30Banner();
     const grid = document.getElementById('year-grid');
     grid.innerHTML = '';
     for (let m = 0; m < 12; m++) {
       const monthEvents = events.filter(e => {
         if (!e.event_date) return false;
         const d = new Date(e.event_date);
-        // Also include events whose end_date spans this month
         if (d.getMonth() === m) return true;
         if (e.end_date) {
           const endD = new Date(e.end_date);
@@ -593,16 +665,41 @@ function renderArhjul() {
           ${monthEvents.map(e => {
             const color = CATEGORY_COLORS[e.category] || '#888';
             const icons = (e.needs_comms ? '📢' : '') + (e.recurring ? '🔄' : '');
+            const eventDate = new Date(e.event_date);
+            const dateStr = `${eventDate.getDate()}. ${MONTHS_DA[eventDate.getMonth()]}`;
             return `
             <div class="event-chip" style="border-left:3px solid ${color}" onclick="showEventDetail(${e.id})" title="${e.title}">
               ${icons ? `<span class="chip-icons">${icons}</span>` : ''}
               <span class="chip-text">${e.title}</span>
+              <span class="chip-date">${dateStr}</span>
             </div>`;
           }).join('')}
           ${!monthEvents.length ? '<div style="color:#333;font-size:0.7rem;text-align:center;padding-top:0.5rem;">—</div>' : ''}
         </div>`;
     }
   });
+}
+
+function renderNext30Banner() {
+  const banner = document.getElementById('next-30-banner');
+  const chips = document.getElementById('next-30-chips');
+  
+  if (!dashboardDataCache || !dashboardDataCache.next_30_days || dashboardDataCache.next_30_days.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  banner.style.display = 'block';
+  chips.innerHTML = dashboardDataCache.next_30_days.map(e => {
+    const color = CATEGORY_COLORS[e.category] || '#888';
+    const eventDate = new Date(e.event_date);
+    const dateStr = `${eventDate.getDate()}. ${MONTHS_DA[eventDate.getMonth()]}`;
+    const icons = (e.needs_comms ? '📢' : '') + (e.recurring ? '🔄' : '');
+    return `<div class="banner-chip" style="background:${color}20;border-left:3px solid ${color}" onclick="showEventDetail(${e.id})">
+      <span class="banner-chip-date">${dateStr}</span>
+      <span class="banner-chip-title">${icons ? icons + ' ' : ''}${e.title}</span>
+    </div>`;
+  }).join('');
 }
 
 async function loadEvents() {
@@ -620,7 +717,7 @@ function showEventDetail(id) {
   endRow.style.display = e.end_date ? '' : 'none';
   document.getElementById('detail-event-category').textContent = CATEGORY_LABELS[e.category] || e.category;
   document.getElementById('detail-event-description').textContent = e.description || '—';
-  document.getElementById('detail-event-recurring').textContent = e.recurring || 'None';
+  document.getElementById('detail-event-recurring').textContent = e.recurring ? e.recurring.charAt(0).toUpperCase() + e.recurring.slice(1) : 'None';
   document.getElementById('detail-event-needs-comms').textContent = e.needs_comms ? 'Yes 📢' : 'No';
 
   const actions = document.getElementById('detail-event-actions');
@@ -694,15 +791,13 @@ function renderContentCalendar() {
     contentPostsCache = posts;
     const firstDay = new Date(commsYear, commsMonth, 1);
     const lastDay = new Date(commsYear, commsMonth + 1, 0);
-    const startDow = (firstDay.getDay() + 6) % 7; // Monday=0
+    const startDow = (firstDay.getDay() + 6) % 7;
     const daysInMonth = lastDay.getDate();
 
     const grid = document.getElementById('content-calendar-grid');
-    // Day headers
     const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     let html = dayNames.map(d => `<div class="cal-header">${d}</div>`).join('');
 
-    // Empty cells before first day
     for (let i = 0; i < startDow; i++) html += '<div class="cal-cell empty"></div>';
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -742,6 +837,23 @@ function renderPostLog() {
   });
 }
 
+function renderNeedsCommsAlert() {
+  const alert = document.getElementById('needs-comms-alert');
+  const text = document.getElementById('needs-comms-text');
+  
+  if (!dashboardDataCache) {
+    alert.style.display = 'none';
+    return;
+  }
+
+  if (dashboardDataCache.posts_due > 0) {
+    alert.style.display = 'flex';
+    text.innerHTML = `⚠️ <strong>${dashboardDataCache.posts_due}</strong> event${dashboardDataCache.posts_due > 1 ? 's' : ''} need${dashboardDataCache.posts_due === 1 ? 's' : ''} communications`;
+  } else {
+    alert.style.display = 'none';
+  }
+}
+
 function openContentPostModal(row, event) {
   document.getElementById('cp-id').value = row ? row.id : '';
   document.getElementById('cp-title').value = row ? row.title : (event ? event.title : '');
@@ -752,7 +864,6 @@ function openContentPostModal(row, event) {
   document.getElementById('cp-link').value = row ? row.link || '' : '';
   document.getElementById('cp-notes').value = row ? row.notes || '' : '';
 
-  // Populate event dropdown
   const evSelect = document.getElementById('cp-event-id');
   evSelect.innerHTML = '<option value="">— none —</option>';
   eventsCache.forEach(e => {
@@ -816,32 +927,126 @@ function saveContentPost() {
   const url = id ? `${API}/content-posts/${id}` : `${API}/content-posts`;
   const method = id ? 'PUT' : 'POST';
   fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-    .then(r => { closeAllModals(); renderContentCalendar(); renderPostLog(); });
+    .then(r => { closeAllModals(); renderContentCalendar(); renderPostLog(); loadDashboard(); });
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 function loadDashboard() {
-  Promise.all([
-    fetch(`${API}/fundraising`).then(r => r.json()),
-    fetch(`${API}/fund-pipeline`).then(r => r.json()),
-    fetch(`${API}/tasks`).then(r => r.json()),
-    fetch(`${API}/ideas`).then(r => r.json()),
-    fetch(`${API}/events`).then(r => r.json())
-  ]).then(([fr, fp, tasks, ideas, events]) => {
-    const totalApplied = fr.reduce((s, r) => s + (r.amount_applied || 0), 0);
-    const totalReceived = fr.reduce((s, r) => s + (r.amount_received || 0), 0);
-    const pendingPipeline = fp.filter(r => ['todo','in_progress'].includes(r.status)).length;
-    const openTasks = tasks.filter(r => r.status !== 'done').length;
-
-    document.getElementById('stats').innerHTML = `
-      <div class="stat-card"><div class="label">Ansøgt i alt</div><div class="value">${totalApplied.toLocaleString()} kr</div></div>
-      <div class="stat-card"><div class="label">Modtaget</div><div class="value">${totalReceived.toLocaleString()} kr</div></div>
-      <div class="stat-card"><div class="label">Fonde i pipeline</div><div class="value">${pendingPipeline}</div></div>
-      <div class="stat-card"><div class="label">Åbne tasks</div><div class="value">${openTasks}</div></div>
-      <div class="stat-card"><div class="label">Idéer</div><div class="value">${ideas.length}</div></div>
-      <div class="stat-card"><div class="label">Events i år</div><div class="value">${events.length}</div></div>
-    `;
+  fetch(`${API}/dashboard`).then(r => r.json()).then(data => {
+    dashboardDataCache = data;
+    renderDashboard(data);
+    renderNeedsCommsAlert();
+    renderNext30Banner();
   });
+}
+
+function renderDashboard(data) {
+  const grid = document.getElementById('dashboard-grid');
+  
+  // Open Tasks card
+  const urgentTasksHtml = data.open_tasks.urgent.map(t => 
+    `<div class="dashboard-list-item ${t.due_date && new Date(t.due_date) < new Date() ? 'overdue' : ''}">
+      <span class="list-title">${t.title}</span>
+      <span class="list-meta">${t.assignee || '—'} · ${t.due_date || 'no date'}</span>
+    </div>`
+  ).join('');
+
+  // Upcoming Events card
+  const eventsHtml = data.upcoming_events.events.map(e => {
+    const color = CATEGORY_COLORS[e.category] || '#888';
+    const eventDate = new Date(e.event_date);
+    const dateStr = `${eventDate.getDate()}. ${MONTHS_DA[eventDate.getMonth()]}`;
+    return `<div class="dashboard-list-item" onclick="switchTab('arhjul'); showEventDetail(${e.id})" style="cursor:pointer">
+      <span class="list-dot" style="background:${color}"></span>
+      <span class="list-title">${e.title}</span>
+      <span class="list-meta">${dateStr}</span>
+    </div>`;
+  }).join('');
+
+  // Fundraising card
+  const fundraisingHtml = `
+    <div class="fundraising-numbers">
+      <div class="fundraising-item">
+        <span class="fundraising-value">${data.fundraising.total_received.toLocaleString()}</span>
+        <span class="fundraising-label">kr modtaget</span>
+      </div>
+      <div class="fundraising-divider"></div>
+      <div class="fundraising-item">
+        <span class="fundraising-value" style="color:#5ba0e0">${data.fundraising.total_applied.toLocaleString()}</span>
+        <span class="fundraising-label">kr ansøgt</span>
+      </div>
+    </div>
+  `;
+
+  // Posts Due card
+  const postsDueHtml = data.posts_due > 0 
+    ? `<div class="dashboard-big-number" style="color:#e0c060">${data.posts_due}</div>
+       <div class="dashboard-subtext">events need communications</div>
+       <button class="btn btn-sm" onclick="switchTab('comms')" style="margin-top:0.75rem">Go to Communications</button>`
+    : `<div class="dashboard-big-number" style="color:#60cc80">✓</div>
+       <div class="dashboard-subtext">All caught up!</div>`;
+
+  // Recent Activity
+  const moduleBadges = {
+    task: '🔧 Task',
+    fundraising: '💰 Fundraising',
+    idea: '💡 Idea',
+    post: '📝 Post',
+    event: '📅 Event'
+  };
+  const recentHtml = data.recent_activity.map(item => `
+    <div class="activity-item">
+      <span class="activity-badge">${moduleBadges[item.module] || item.module}</span>
+      <span class="activity-title">${item.title}</span>
+      <span class="activity-time">${new Date(item.created_at).toLocaleDateString('da-DK')}</span>
+    </div>
+  `).join('');
+
+  grid.innerHTML = `
+    <div class="dashboard-card" onclick="switchTab('tasks')">
+      <div class="card-header">
+        <span class="card-icon">🔧</span>
+        <span class="card-title">Open Tasks</span>
+        <span class="card-count">${data.open_tasks.count}</span>
+      </div>
+      <div class="card-content">
+        ${urgentTasksHtml || '<div class="empty-state">No open tasks</div>'}
+      </div>
+    </div>
+    
+    <div class="dashboard-card" onclick="switchTab('arhjul')">
+      <div class="card-header">
+        <span class="card-icon">📅</span>
+        <span class="card-title">Upcoming Deadlines</span>
+        <span class="card-count">${data.upcoming_events.count}</span>
+      </div>
+      <div class="card-content">
+        ${eventsHtml || '<div class="empty-state">No events in next 60 days</div>'}
+      </div>
+    </div>
+    
+    <div class="dashboard-card" onclick="switchTab('fundraising')">
+      <div class="card-header">
+        <span class="card-icon">💰</span>
+        <span class="card-title">Fundraising</span>
+      </div>
+      <div class="card-content">
+        ${fundraisingHtml}
+      </div>
+    </div>
+    
+    <div class="dashboard-card" onclick="switchTab('comms')">
+      <div class="card-header">
+        <span class="card-icon">📢</span>
+        <span class="card-title">Posts Due</span>
+      </div>
+      <div class="card-content" style="text-align:center">
+        ${postsDueHtml}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('recent-activity').innerHTML = recentHtml || '<div class="empty-state">No recent activity</div>';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
