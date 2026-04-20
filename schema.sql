@@ -51,8 +51,23 @@ CREATE TABLE IF NOT EXISTS events (
   title TEXT NOT NULL,
   event_date DATE NOT NULL,
   end_date DATE,
-  category TEXT, -- grant_deadline/activity/board/season/membership
+  category TEXT, -- grant_deadline/activity/board/season/membership/reporting/facility
   description TEXT,
   recurring TEXT, -- null/yearly/monthly
+  needs_comms INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- content posts (communications)
+CREATE TABLE IF NOT EXISTS content_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  platform TEXT, -- facebook/instagram/linkedin/multiple
+  planned_date DATE,
+  status TEXT DEFAULT 'draft', -- draft/scheduled/posted
+  event_id INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  posted_by TEXT,
+  link TEXT,
+  notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

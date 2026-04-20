@@ -21,6 +21,7 @@
   <div class="tab" data-tab="tasks">Tasks</div>
   <div class="tab" data-tab="ideas">Ideas</div>
   <div class="tab" data-tab="arhjul">Årshjul</div>
+  <div class="tab" data-tab="comms">Communications</div>
 </div>
 
 <!-- Dashboard -->
@@ -92,10 +93,43 @@
     <h2>Årshjul — Annual Calendar</h2>
     <button class="btn" onclick="openEventModal()">+ Add Event</button>
   </div>
+  <!-- Category legend -->
+  <div class="category-legend" id="category-legend"></div>
   <div class="year-grid" id="year-grid"></div>
 </div>
 
+<!-- Communications -->
+<div class="panel" id="panel-comms">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h2>Communications</h2>
+    <button class="btn" onclick="openContentPostModal()">+ Add Post</button>
+  </div>
+  <!-- Sub-view tabs -->
+  <div class="sub-tabs">
+    <div class="sub-tab active" data-subtab="content-calendar">Content Calendar</div>
+    <div class="sub-tab" data-subtab="post-log">Post Log</div>
+  </div>
+  <!-- Content Calendar -->
+  <div class="sub-panel active" id="subpanel-content-calendar">
+    <div class="calendar-nav">
+      <button class="btn btn-sm" onclick="commsMonth--; renderContentCalendar()">◀</button>
+      <span id="comms-month-label"></span>
+      <button class="btn btn-sm" onclick="commsMonth++; renderContentCalendar()">▶</button>
+    </div>
+    <div class="content-calendar-grid" id="content-calendar-grid"></div>
+  </div>
+  <!-- Post Log -->
+  <div class="sub-panel" id="subpanel-post-log">
+    <table>
+      <thead><tr><th>Date</th><th>Platform</th><th>Title</th><th>Posted By</th><th>Link</th></tr></thead>
+      <tbody id="tb-post-log"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- MODALS -->
+
+<!-- Fundraising modal -->
 <div class="modal-overlay" id="modal-fundraising">
   <div class="modal">
     <h2>Fundraising</h2>
@@ -106,21 +140,18 @@
     <div class="form-group">
       <label>Status</label>
       <select id="fr-status">
-        <option value="identified">Identified</option>
-        <option value="applied">Applied</option>
-        <option value="approved">Approved</option>
-        <option value="rejected">Rejected</option>
+        <option value="identified">Identified</option><option value="applied">Applied</option>
+        <option value="approved">Approved</option><option value="rejected">Rejected</option>
         <option value="received">Received</option>
       </select>
     </div>
     <div class="form-group"><label>Deadline</label><input id="fr-deadline" type="date"></div>
     <div class="form-group"><label>Notes</label><textarea id="fr-notes"></textarea></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="saveFundraising()">Gem</button>
-    </div>
+    <div class="modal-actions"><button class="btn" onclick="saveFundraising()">Gem</button></div>
   </div>
 </div>
 
+<!-- Fund Pipeline modal -->
 <div class="modal-overlay" id="modal-fund-pipeline">
   <div class="modal">
     <h2>Fund Pipeline</h2>
@@ -132,10 +163,8 @@
     <div class="form-group">
       <label>Status</label>
       <select id="fp-status">
-        <option value="todo">Todo</option>
-        <option value="in_progress">In Progress</option>
-        <option value="submitted">Submitted</option>
-        <option value="skip">Skip</option>
+        <option value="todo">Todo</option><option value="in_progress">In Progress</option>
+        <option value="submitted">Submitted</option><option value="skip">Skip</option>
       </select>
     </div>
     <div class="form-group"><label>Notes</label><textarea id="fp-notes"></textarea></div>
@@ -143,6 +172,7 @@
   </div>
 </div>
 
+<!-- Task modal -->
 <div class="modal-overlay" id="modal-task">
   <div class="modal">
     <h2>Task</h2>
@@ -151,19 +181,11 @@
     <div class="form-group"><label>Assignee</label><input id="task-assignee" placeholder="Navn"></div>
     <div class="form-group">
       <label>Status</label>
-      <select id="task-status">
-        <option value="todo">Todo</option>
-        <option value="started">Started</option>
-        <option value="done">Done</option>
-      </select>
+      <select id="task-status"><option value="todo">Todo</option><option value="started">Started</option><option value="done">Done</option></select>
     </div>
     <div class="form-group">
       <label>Priority</label>
-      <select id="task-priority">
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
+      <select id="task-priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
     </div>
     <div class="form-group"><label>Due Date</label><input id="task-due-date" type="date"></div>
     <div class="form-group"><label>Notes</label><textarea id="task-notes"></textarea></div>
@@ -171,6 +193,7 @@
   </div>
 </div>
 
+<!-- Idea modal -->
 <div class="modal-overlay" id="modal-idea">
   <div class="modal">
     <h2>Idea</h2>
@@ -180,17 +203,13 @@
     <div class="form-group"><label>Category</label><input id="idea-category" placeholder="e.g. aktivitet, samarbejde, funding"></div>
     <div class="form-group">
       <label>Status</label>
-      <select id="idea-status">
-        <option value="new">New</option>
-        <option value="exploring">Exploring</option>
-        <option value="approved">Approved</option>
-        <option value="dropped">Dropped</option>
-      </select>
+      <select id="idea-status"><option value="new">New</option><option value="exploring">Exploring</option><option value="approved">Approved</option><option value="dropped">Dropped</option></select>
     </div>
     <div class="modal-actions"><button class="btn" onclick="saveIdea()">Gem</button></div>
   </div>
 </div>
 
+<!-- Event modal (add/edit) -->
 <div class="modal-overlay" id="modal-event">
   <div class="modal">
     <h2>Event</h2>
@@ -206,18 +225,76 @@
         <option value="board">Board</option>
         <option value="season">Season</option>
         <option value="membership">Membership</option>
+        <option value="reporting">Reporting</option>
+        <option value="facility">Facility</option>
       </select>
     </div>
     <div class="form-group"><label>Description</label><textarea id="event-description"></textarea></div>
     <div class="form-group">
       <label>Recurring</label>
-      <select id="event-recurring">
-        <option value="">None</option>
-        <option value="yearly">Yearly</option>
-        <option value="monthly">Monthly</option>
-      </select>
+      <select id="event-recurring"><option value="">None</option><option value="yearly">Yearly</option><option value="monthly">Monthly</option></select>
+    </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="event-needs-comms"> Needs Communications</label>
     </div>
     <div class="modal-actions"><button class="btn" onclick="saveEvent()">Gem</button></div>
+  </div>
+</div>
+
+<!-- Event detail modal (view) -->
+<div class="modal-overlay" id="modal-event-detail">
+  <div class="modal">
+    <h2 id="detail-event-title"></h2>
+    <div class="detail-row"><span class="detail-label">Date:</span> <span id="detail-event-date"></span></div>
+    <div class="detail-row" id="detail-end-date-row"><span class="detail-label">End Date:</span> <span id="detail-event-end-date"></span></div>
+    <div class="detail-row"><span class="detail-label">Category:</span> <span id="detail-event-category"></span></div>
+    <div class="detail-row"><span class="detail-label">Description:</span> <span id="detail-event-description"></span></div>
+    <div class="detail-row"><span class="detail-label">Recurring:</span> <span id="detail-event-recurring"></span></div>
+    <div class="detail-row"><span class="detail-label">Needs Comms:</span> <span id="detail-event-needs-comms"></span></div>
+    <div class="modal-actions" id="detail-event-actions"></div>
+  </div>
+</div>
+
+<!-- Content Post modal -->
+<div class="modal-overlay" id="modal-content-post">
+  <div class="modal">
+    <h2>Content Post</h2>
+    <input type="hidden" id="cp-id">
+    <div class="form-group"><label>Title</label><input id="cp-title" placeholder="Post title"></div>
+    <div class="form-group">
+      <label>Platform</label>
+      <select id="cp-platform">
+        <option value="facebook">Facebook</option><option value="instagram">Instagram</option>
+        <option value="linkedin">LinkedIn</option><option value="multiple">Multiple</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Planned Date</label><input id="cp-planned-date" type="date"></div>
+    <div class="form-group">
+      <label>Link to Event</label>
+      <select id="cp-event-id"><option value="">— none —</option></select>
+    </div>
+    <div class="form-group">
+      <label>Status</label>
+      <select id="cp-status"><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="posted">Posted</option></select>
+    </div>
+    <div class="form-group"><label>Posted By</label><input id="cp-posted-by" placeholder="Name"></div>
+    <div class="form-group"><label>Link</label><input id="cp-link" placeholder="https://..."></div>
+    <div class="form-group"><label>Notes</label><textarea id="cp-notes"></textarea></div>
+    <div class="modal-actions"><button class="btn" onclick="saveContentPost()">Gem</button></div>
+  </div>
+</div>
+
+<!-- Content Post detail modal -->
+<div class="modal-overlay" id="modal-content-post-detail">
+  <div class="modal">
+    <h2 id="detail-cp-title"></h2>
+    <div class="detail-row"><span class="detail-label">Platform:</span> <span id="detail-cp-platform"></span></div>
+    <div class="detail-row"><span class="detail-label">Planned:</span> <span id="detail-cp-planned-date"></span></div>
+    <div class="detail-row"><span class="detail-label">Status:</span> <span id="detail-cp-status"></span></div>
+    <div class="detail-row"><span class="detail-label">Posted By:</span> <span id="detail-cp-posted-by"></span></div>
+    <div class="detail-row"><span class="detail-label">Link:</span> <span id="detail-cp-link"></span></div>
+    <div class="detail-row"><span class="detail-label">Notes:</span> <span id="detail-cp-notes"></span></div>
+    <div class="modal-actions" id="detail-cp-actions"></div>
   </div>
 </div>
 
@@ -237,6 +314,11 @@ function del(url, onOk) {
   fetch(url, { method: 'DELETE' }).then(r => r.json()).then(onOk);
 }
 
+// Close modals on overlay click
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) closeAllModals();
+});
+
 // ── tabs ────────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
@@ -246,6 +328,17 @@ document.querySelectorAll('.tab').forEach(t => {
     document.getElementById('panel-' + t.dataset.tab).classList.add('active');
     if (t.dataset.tab === 'dashboard') loadDashboard();
     if (t.dataset.tab === 'arhjul') renderArhjul();
+    if (t.dataset.tab === 'comms') { renderContentCalendar(); renderPostLog(); }
+  });
+});
+
+// Sub-tabs for communications
+document.querySelectorAll('.sub-tab').forEach(st => {
+  st.addEventListener('click', () => {
+    document.querySelectorAll('.sub-tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.sub-panel').forEach(x => x.classList.remove('active'));
+    st.classList.add('active');
+    document.getElementById('subpanel-' + st.dataset.subtab).classList.add('active');
   });
 });
 
@@ -447,18 +540,35 @@ function saveIdea() {
 }
 
 // ── ÅRSHJUL ──────────────────────────────────────────────────────────────────
-const MONTHS_DA = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
+const MONTHS_DA = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 const CATEGORY_COLORS = {
-  grant_deadline: 'dot-grant_deadline',
-  activity: 'dot-activity',
-  board: 'dot-board',
-  season: 'dot-season',
-  membership: 'dot-membership'
+  grant_deadline: '#cc6060',
+  activity: '#60cc80',
+  board: '#a060cc',
+  season: '#e0c060',
+  membership: '#5ba0e0',
+  reporting: '#e0e060',
+  facility: '#60cccc'
+};
+const CATEGORY_LABELS = {
+  grant_deadline: 'Grant Deadline',
+  activity: 'Activity',
+  board: 'Board',
+  season: 'Season',
+  membership: 'Membership',
+  reporting: 'Reporting',
+  facility: 'Facility'
 };
 
 let eventsCache = [];
 
 function renderArhjul() {
+  // Legend
+  const legend = document.getElementById('category-legend');
+  legend.innerHTML = Object.entries(CATEGORY_LABELS).map(([k,v]) =>
+    `<span class="legend-item"><span class="legend-dot" style="background:${CATEGORY_COLORS[k]}"></span>${v}</span>`
+  ).join('');
+
   loadEvents().then(events => {
     eventsCache = events;
     const grid = document.getElementById('year-grid');
@@ -466,16 +576,29 @@ function renderArhjul() {
     for (let m = 0; m < 12; m++) {
       const monthEvents = events.filter(e => {
         if (!e.event_date) return false;
-        return new Date(e.event_date).getMonth() === m;
+        const d = new Date(e.event_date);
+        // Also include events whose end_date spans this month
+        if (d.getMonth() === m) return true;
+        if (e.end_date) {
+          const endD = new Date(e.end_date);
+          const startMonth = d.getMonth();
+          const endMonth = endD.getMonth();
+          if (endMonth >= m && startMonth <= m) return true;
+        }
+        return false;
       });
       grid.innerHTML += `
         <div class="month-col">
           <h3>${MONTHS_DA[m]}</h3>
-          ${monthEvents.map(e => `
-            <div class="event-label" title="${e.description || ''}">
-              <span class="event-dot ${CATEGORY_COLORS[e.category] || ''}"></span>
-              ${e.title}
-            </div>`).join('')}
+          ${monthEvents.map(e => {
+            const color = CATEGORY_COLORS[e.category] || '#888';
+            const icons = (e.needs_comms ? '📢' : '') + (e.recurring ? '🔄' : '');
+            return `
+            <div class="event-chip" style="border-left:3px solid ${color}" onclick="showEventDetail(${e.id})" title="${e.title}">
+              ${icons ? `<span class="chip-icons">${icons}</span>` : ''}
+              <span class="chip-text">${e.title}</span>
+            </div>`;
+          }).join('')}
           ${!monthEvents.length ? '<div style="color:#333;font-size:0.7rem;text-align:center;padding-top:0.5rem;">—</div>' : ''}
         </div>`;
     }
@@ -487,6 +610,40 @@ async function loadEvents() {
   return r.json();
 }
 
+function showEventDetail(id) {
+  const e = eventsCache.find(x => x.id === id);
+  if (!e) return;
+  document.getElementById('detail-event-title').textContent = e.title;
+  document.getElementById('detail-event-date').textContent = e.event_date;
+  document.getElementById('detail-event-end-date').textContent = e.end_date || '—';
+  const endRow = document.getElementById('detail-end-date-row');
+  endRow.style.display = e.end_date ? '' : 'none';
+  document.getElementById('detail-event-category').textContent = CATEGORY_LABELS[e.category] || e.category;
+  document.getElementById('detail-event-description').textContent = e.description || '—';
+  document.getElementById('detail-event-recurring').textContent = e.recurring || 'None';
+  document.getElementById('detail-event-needs-comms').textContent = e.needs_comms ? 'Yes 📢' : 'No';
+
+  const actions = document.getElementById('detail-event-actions');
+  let html = `<button class="btn btn-sm" onclick="editEventFromDetail(${e.id})">✏️ Edit</button>`;
+  html += `<button class="btn btn-sm btn-danger" onclick="del('${API}/events/${e.id}', () => { closeAllModals(); renderArhjul(); })">🗑️</button>`;
+  if (e.needs_comms) {
+    html += `<button class="btn btn-sm" style="background:#e0c060;color:#000" onclick="closeAllModals(); planPostForEvent(${e.id})">📢 Plan post</button>`;
+  }
+  actions.innerHTML = html;
+  document.getElementById('modal-event-detail').classList.add('open');
+}
+
+function editEventFromDetail(id) {
+  closeAllModals();
+  const e = eventsCache.find(x => x.id === id);
+  if (e) openEventModal(e);
+}
+
+function planPostForEvent(eventId) {
+  const e = eventsCache.find(x => x.id === eventId);
+  openContentPostModal(null, e);
+}
+
 function openEventModal(row) {
   document.getElementById('event-id').value = row ? row.id : '';
   document.getElementById('event-title').value = row ? row.title : '';
@@ -495,6 +652,7 @@ function openEventModal(row) {
   document.getElementById('event-category').value = row ? row.category || 'activity' : 'activity';
   document.getElementById('event-description').value = row ? row.description || '' : '';
   document.getElementById('event-recurring').value = row ? row.recurring || '' : '';
+  document.getElementById('event-needs-comms').checked = row ? !!row.needs_comms : false;
   document.getElementById('modal-event').classList.add('open');
 }
 
@@ -506,12 +664,159 @@ function saveEvent() {
     end_date: document.getElementById('event-end-date').value || null,
     category: document.getElementById('event-category').value,
     description: document.getElementById('event-description').value,
-    recurring: document.getElementById('event-recurring').value || null
+    recurring: document.getElementById('event-recurring').value || null,
+    needs_comms: document.getElementById('event-needs-comms').checked ? 1 : 0
   };
   const url = id ? `${API}/events/${id}` : `${API}/events`;
   const method = id ? 'PUT' : 'POST';
   fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
     .then(r => { closeAllModals(); renderArhjul(); loadDashboard(); });
+}
+
+// ── COMMUNICATIONS ───────────────────────────────────────────────────────────
+let commsMonth = new Date().getMonth();
+let commsYear = new Date().getFullYear();
+let contentPostsCache = [];
+
+async function loadContentPosts() {
+  const r = await fetch(`${API}/content-posts`);
+  return r.json();
+}
+
+function renderContentCalendar() {
+  if (commsMonth < 0) { commsMonth = 11; commsYear--; }
+  if (commsMonth > 11) { commsMonth = 0; commsYear++; }
+
+  const label = document.getElementById('comms-month-label');
+  label.textContent = `${MONTHS_DA[commsMonth]} ${commsYear}`;
+
+  loadContentPosts().then(posts => {
+    contentPostsCache = posts;
+    const firstDay = new Date(commsYear, commsMonth, 1);
+    const lastDay = new Date(commsYear, commsMonth + 1, 0);
+    const startDow = (firstDay.getDay() + 6) % 7; // Monday=0
+    const daysInMonth = lastDay.getDate();
+
+    const grid = document.getElementById('content-calendar-grid');
+    // Day headers
+    const dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    let html = dayNames.map(d => `<div class="cal-header">${d}</div>`).join('');
+
+    // Empty cells before first day
+    for (let i = 0; i < startDow; i++) html += '<div class="cal-cell empty"></div>';
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${commsYear}-${String(commsMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dayPosts = posts.filter(p => p.planned_date === dateStr);
+      const isToday = dateStr === new Date().toISOString().slice(0,10);
+      html += `<div class="cal-cell${isToday ? ' today' : ''}">
+        <div class="cal-date">${d}</div>
+        ${dayPosts.map(p => {
+          const pIcon = {facebook:'F',instagram:'I',linkedin:'L',multiple:'M'}[p.platform] || '?';
+          const statusClass = {draft:'cp-draft',scheduled:'cp-scheduled',posted:'cp-posted'}[p.status] || '';
+          const eventIcon = p.event_id ? '📅' : '';
+          return `<div class="cp-card ${statusClass}" onclick="showContentPostDetail(${p.id})">
+            <span class="cp-icon">${pIcon}</span>${eventIcon ? `<span class="cp-event-icon">${eventIcon}</span>` : ''}
+            <span class="cp-title">${p.title}</span>
+            <span class="cp-badge cp-badge-${p.status}">${p.status}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+    grid.innerHTML = html;
+  });
+}
+
+function renderPostLog() {
+  loadContentPosts().then(posts => {
+    const posted = posts.filter(p => p.status === 'posted').sort((a,b) => b.planned_date.localeCompare(a.planned_date));
+    const tb = document.getElementById('tb-post-log');
+    tb.innerHTML = posted.length ? posted.map(p => `
+      <tr>
+        <td>${p.planned_date}</td>
+        <td>${p.platform}</td>
+        <td>${p.title}</td>
+        <td>${p.posted_by || '—'}</td>
+        <td>${p.link ? `<a href="${p.link}" target="_blank">${p.link.slice(0,40)}…</a>` : '—'}</td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:#666;text-align:center;padding:2rem;">No posted content yet</td></tr>';
+  });
+}
+
+function openContentPostModal(row, event) {
+  document.getElementById('cp-id').value = row ? row.id : '';
+  document.getElementById('cp-title').value = row ? row.title : (event ? event.title : '');
+  document.getElementById('cp-platform').value = row ? row.platform || 'facebook' : 'facebook';
+  document.getElementById('cp-planned-date').value = row ? row.planned_date || '' : (event ? event.event_date : '');
+  document.getElementById('cp-status').value = row ? row.status : 'draft';
+  document.getElementById('cp-posted-by').value = row ? row.posted_by || '' : '';
+  document.getElementById('cp-link').value = row ? row.link || '' : '';
+  document.getElementById('cp-notes').value = row ? row.notes || '' : '';
+
+  // Populate event dropdown
+  const evSelect = document.getElementById('cp-event-id');
+  evSelect.innerHTML = '<option value="">— none —</option>';
+  eventsCache.forEach(e => {
+    evSelect.innerHTML += `<option value="${e.id}"${(row && row.event_id === e.id) || (event && event.id === e.id) ? ' selected' : ''}>${e.title} (${e.event_date})</option>`;
+  });
+
+  document.getElementById('modal-content-post').classList.add('open');
+}
+
+function showContentPostDetail(id) {
+  const p = contentPostsCache.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('detail-cp-title').textContent = p.title;
+  document.getElementById('detail-cp-platform').textContent = p.platform;
+  document.getElementById('detail-cp-planned-date').textContent = p.planned_date;
+  document.getElementById('detail-cp-status').textContent = p.status;
+  document.getElementById('detail-cp-posted-by').textContent = p.posted_by || '—';
+  document.getElementById('detail-cp-link').textContent = p.link || '—';
+  document.getElementById('detail-cp-notes').textContent = p.notes || '—';
+
+  const actions = document.getElementById('detail-cp-actions');
+  let html = '';
+  if (p.status !== 'posted') {
+    html += `<button class="btn btn-sm" style="background:#60cc80" onclick="markContentPosted(${p.id})">✓ Mark as Posted</button>`;
+  }
+  html += `<button class="btn btn-sm" onclick="closeAllModals(); editContentPost(${p.id})">✏️ Edit</button>`;
+  html += `<button class="btn btn-sm btn-danger" onclick="del('${API}/content-posts/${p.id}', () => { closeAllModals(); renderContentCalendar(); renderPostLog(); })">🗑️</button>`;
+  actions.innerHTML = html;
+  document.getElementById('modal-content-post-detail').classList.add('open');
+}
+
+function markContentPosted(id) {
+  fetch(`${API}/content-posts/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ status: 'posted' })
+  }).then(() => {
+    closeAllModals();
+    renderContentCalendar();
+    renderPostLog();
+  });
+}
+
+function editContentPost(id) {
+  const p = contentPostsCache.find(x => x.id === id);
+  if (p) openContentPostModal(p);
+}
+
+function saveContentPost() {
+  const id = document.getElementById('cp-id').value;
+  const payload = {
+    title: document.getElementById('cp-title').value,
+    platform: document.getElementById('cp-platform').value,
+    planned_date: document.getElementById('cp-planned-date').value,
+    status: document.getElementById('cp-status').value,
+    event_id: document.getElementById('cp-event-id').value || null,
+    posted_by: document.getElementById('cp-posted-by').value || null,
+    link: document.getElementById('cp-link').value || null,
+    notes: document.getElementById('cp-notes').value || null
+  };
+  const url = id ? `${API}/content-posts/${id}` : `${API}/content-posts`;
+  const method = id ? 'PUT' : 'POST';
+  fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => { closeAllModals(); renderContentCalendar(); renderPostLog(); });
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────

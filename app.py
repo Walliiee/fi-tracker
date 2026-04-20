@@ -11,7 +11,7 @@ def status():
     return jsonify({
         "status": "ok",
         "app": "fi-tracker",
-        "modules": ["fundraising", "fund_pipeline", "tasks", "ideas", "events"]
+        "modules": ["fundraising", "fund_pipeline", "tasks", "ideas", "events", "content_posts"]
     })
 
 # ── fundraising ─────────────────────────────────────────────────────────────
@@ -197,10 +197,11 @@ def create_event():
     data = request.json
     conn = db_module.get_db()
     cur = conn.execute(
-        '''INSERT INTO events (title, event_date, end_date, category, description, recurring)
-           VALUES (?, ?, ?, ?, ?, ?)''',
+        '''INSERT INTO events (title, event_date, end_date, category, description, recurring, needs_comms)
+           VALUES (?, ?, ?, ?, ?, ?, ?)''',
         (data.get('title'), data.get('event_date'), data.get('end_date'),
-         data.get('category'), data.get('description'), data.get('recurring'))
+         data.get('category'), data.get('description'), data.get('recurring'),
+         data.get('needs_comms', 0))
     )
     conn.commit()
     row = conn.execute('SELECT * FROM events WHERE id=?', (cur.lastrowid,)).fetchone()
@@ -217,15 +218,68 @@ def handle_event(id):
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
-        '''UPDATE events SET title=?, event_date=?, end_date=?, category=?, description=?, recurring=?
+        '''UPDATE events SET title=?, event_date=?, end_date=?, category=?, description=?, recurring=?, needs_comms=?
            WHERE id=?''',
         (data.get('title'), data.get('event_date'), data.get('end_date'),
-         data.get('category'), data.get('description'), data.get('recurring'), id)
+         data.get('category'), data.get('description'), data.get('recurring'),
+         data.get('needs_comms', 0), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM events WHERE id=?', (id,)).fetchone()
     conn.close()
     return jsonify(dict(row))
+
+# ── content posts (communications) ──────────────────────────────────────────────
+@app.route('/api/content-posts', methods=['GET'])
+def get_content_posts():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM content_posts ORDER BY planned_date ASC').fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/content-posts', methods=['POST'])
+def create_content_post():
+    data = request.json
+    conn = db_module.get_db()
+    cur = conn.execute(
+        '''INSERT INTO content_posts (title, platform, planned_date, status, event_id, posted_by, link, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        (data.get('title'), data.get('platform'), data.get('planned_date'),
+         data.get('status', 'draft'), data.get('event_id'), data.get('posted_by'),
+         data.get('link'), data.get('notes'))
+    )
+    conn.commit()
+    row = conn.execute('SELECT * FROM content_posts WHERE id=?', (cur.lastrowid,)).fetchone()
+    conn.close()
+    return jsonify(dict(row)), 201
+
+@app.route('/api/content-posts/<int:id>', methods=['PUT', 'DELETE'])
+def handle_content_post(id):
+    conn = db_module.get_db()
+    if request.method == 'DELETE':
+        conn.execute('DELETE FROM content_posts WHERE id=?', (id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'deleted': id})
+    data = request.json
+    conn.execute(
+        '''UPDATE content_posts SET title=?, platform=?, planned_date=?, status=?, event_id=?, posted_by=?, link=?, notes=?
+           WHERE id=?''',
+        (data.get('title'), data.get('platform'), data.get('planned_date'),
+         data.get('status'), data.get('event_id'), data.get('posted_by'),
+         data.get('link'), data.get('notes'), id)
+    )
+    conn.commit()
+    row = conn.execute('SELECT * FROM content_posts WHERE id=?', (id,)).fetchone()
+    conn.close()
+    return jsonify(dict(row))
+
+@app.route('/api/content-posts/by-event/<int:event_id>', methods=['GET'])
+def get_content_posts_by_event(event_id):
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM content_posts WHERE event_id=? ORDER BY planned_date ASC', (event_id,)).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
 
 # ── static files ───────────────────────────────────────────────────────────────
 @app.route('/')
