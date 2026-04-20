@@ -415,3 +415,180 @@ def index():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5002, debug=True)
+
+# ── CSV export helpers ────────────────────────────────────────────────────────
+def _csv_response(rows, module):
+    from flask import make_response
+    import csv
+    from io import StringIO
+    import datetime
+    today = datetime.date.today().isoformat()
+    output = StringIO()
+    if not rows:
+        output.write('')
+    else:
+        writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows([dict(r) for r in rows])
+    resp = make_response(output.getvalue())
+    resp.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    resp.headers['Content-Disposition'] = f'attachment; filename=fi-tracker-{module}-{today}.csv'
+    return resp
+
+
+# ── CSV export endpoints ──────────────────────────────────────────────────────
+@app.route('/api/export/fundraising', methods=['GET'])
+def export_fundraising():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM fundraising ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'fundraising')
+
+@app.route('/api/export/tasks', methods=['GET'])
+def export_tasks():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM tasks ORDER BY created_at DESC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'tasks')
+
+@app.route('/api/export/ideas', methods=['GET'])
+def export_ideas():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM ideas ORDER BY vote_score DESC, created_at DESC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'ideas')
+
+@app.route('/api/export/events', methods=['GET'])
+def export_events():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM events ORDER BY event_date ASC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'events')
+
+
+# ── Ollama AI report generator ────────────────────────────────────────────────
+@app.route('/api/report', methods=['POST'])
+def generate_report():
+    from datetime import datetime, timedelta
+    import urllib.request, urllib.error, json
+
+    data = request.json or {}
+    today = datetime.now().date()
+    default_from = (today - timedelta(days=30)).isoformat()
+    default_to = today.isoformat()
+    from_date = data.get('from_date', default_from)
+    to_date = data.get('to_date', default_to)
+
+    conn = db_module.get_db()
+
+    # Tasks
+    tasks = conn.execute('SELECT * FROM tasks ORDER BY created_at DESC').fetchall()
+    open_tasks = [t for t in tasks if t['status'] != 'done']
+    overdue_tasks = [t for t in tasks if t['status'] != 'done' and t['due_date'] and t['due_date'] < today.isoformat()]
+    assignees = {}
+    for t in tasks:
+        a = t['assignee'] or 'Unassigned'
+        assignees[a] = assignees.get(a, 0) + 1
+    top_assignees = sorted(assignees.items(), key=lambda x: -x[1])[:3]
+
+    # Fundraising
+    fr_rows = conn.execute('SELECT * FROM fundraising ORDER BY created_at DESC').fetchall()
+    total_applied = sum(r['amount_applied'] or 0 for r in fr_rows)
+    total_received = sum(r['amount_received'] or 0 for r in fr_rows)
+    win_rate = round(total_received / total_applied * 100, 1) if total_applied > 0 else 0
+    fr_statuses = {}
+    for r in fr_rows:
+        s = r['status'] or 'unknown'
+        fr_statuses[s] = fr_statuses.get(s, 0) + 1
+    upcoming_deadlines = [r for r in fr_rows if r['deadline'] and r['deadline'] >= today.isoformat() and r['status'] in ('identified','applied','approved')]
+    upcoming_deadlines.sort(key=lambda x: x['deadline'])
+
+    # Ideas
+    idea_rows = conn.execute('SELECT * FROM ideas ORDER BY vote_score DESC, created_at DESC').fetchall()
+    ideas_in_range = [i for i in idea_rows if i['created_at'] and from_date <= i['created_at'][:10] <= to_date]
+    top_voted = [i for i in idea_rows if i['vote_score'] and i['vote_score'] > 0][:3]
+    approved_count = len([i for i in idea_rows if i['status'] == 'approved'])
+
+    # Events
+    event_rows = conn.execute('SELECT * FROM events ORDER BY event_date ASC').fetchall()
+    upcoming_events = [e for e in event_rows if e['event_date'] and from_date <= e['event_date'] <= to_date]
+    needs_comms_count = len([e for e in event_rows if e['needs_comms']])
+
+    # Communications
+    posts = conn.execute('SELECT * FROM content_posts ORDER BY planned_date DESC').fetchall()
+    posts_in_range = [p for p in posts if p['planned_date'] and from_date <= p['planned_date'] <= to_date]
+    posted_count = len([p for p in posts if p['status'] == 'posted'])
+
+    conn.close()
+
+    stats = {
+        'from_date': from_date,
+        'to_date': to_date,
+        'tasks': {
+            'total': len(tasks),
+            'open': len(open_tasks),
+            'overdue': len(overdue_tasks),
+            'top_assignees': top_assignees,
+        },
+        'fundraising': {
+            'total_applied': total_applied,
+            'total_received': total_received,
+            'win_rate': win_rate,
+            'status_breakdown': fr_statuses,
+            'upcoming_deadlines': [(r['name'], r['deadline']) for r in upcoming_deadlines[:5]],
+        },
+        'ideas': {
+            'new_in_range': len(ideas_in_range),
+            'total': len(idea_rows),
+            'approved': approved_count,
+            'top_voted': [(i['title'], i['vote_score']) for i in top_voted],
+        },
+        'events': {
+            'in_range': len(upcoming_events),
+            'total_needs_comms': needs_comms_count,
+        },
+        'communications': {
+            'posts_in_range': len(posts_in_range),
+            'posted_total': posted_count,
+        }
+    }
+
+    prompt = f"""Du er en dansk foreningsassistent der skriver et kort, venligt management-resume for Familieidræt.
+
+## Data fra {from_date} til {to_date}
+
+**Opgaver:** {stats['tasks']['open']} aabne, {stats['tasks']['overdue']} overskredet. Top-assignees: {', '.join(f'{a}({n})' for a,n in stats['tasks']['top_assignees']) if stats['tasks']['top_assignees'] else 'ingen'}.
+
+**Fundraising:** {stats['fundraising']['total_applied']:,} kr ansoegt, {stats['fundraising']['total_received']:,} kr modtaget. Win rate: {stats['fundraising']['win_rate']}%. Status: {', '.join(f'{k}: {v}' for k,v in stats['fundraising']['status_breakdown'].items()) if stats['fundraising']['status_breakdown'] else 'ingen'}. Kommende deadlines: {', '.join(f'{n} ({d})' for n,d in stats['fundraising']['upcoming_deadlines']) if stats['fundraising']['upcoming_deadlines'] else 'ingen'}.
+
+**Ideer:** {stats['ideas']['new_in_range']} nye ideer i perioden. {stats['ideas']['approved']} godkendt i alt. Top stemmer: {', '.join(f'{t} ({v})' for t,v in stats['ideas']['top_voted']) if stats['ideas']['top_voted'] else 'ingen'}.
+
+**Begivenheder:** {stats['events']['in_range']} i perioden. {stats['events']['total_needs_comms']} events mangler kommunikation.
+
+**Indhold:** {stats['communications']['posts_in_range']} opslag i perioden. {stats['communications']['posted_total']} posted i alt.
+
+Skriv et kort resume pa 3-5 punkter pa dansk. Vaer konkret, ikke generisk. Naevn tal. Brug bindestreg - for punkter, ikke asterisk."""
+
+    try:
+        req = urllib.request.Request(
+            'http://localhost:11434/api/generate',
+            data=json.dumps({'model': 'minimax-m2.7:cloud', 'prompt': prompt, 'stream': False}).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            ai_text = result.get('response', '').strip()
+    except Exception:
+        ai_text = None
+
+    if ai_text:
+        return jsonify({'report': ai_text, 'stats': stats})
+    else:
+        fallback = f"AI-model er ikke tilgaengelig. Raadata:\n\n"
+        fallback += f"- Opgaver: {stats['tasks']['open']} aabne, {stats['tasks']['overdue']} overskredet\n"
+        fallback += f"- Fundraising: {stats['fundraising']['total_applied']:,} kr ansoegt, {stats['fundraising']['total_received']:,} kr modtaget ({stats['fundraising']['win_rate']}% win rate)\n"
+        fallback += f"- Ideer: {stats['ideas']['new_in_range']} nye, {stats['ideas']['approved']} godkendt\n"
+        fallback += f"- Events: {stats['events']['in_range']} i perioden, {stats['events']['total_needs_comms']} mangler comms\n"
+        fallback += f"- Indhold: {stats['communications']['posts_in_range']} opslag i perioden\n"
+        return jsonify({'report': fallback, 'stats': stats})
