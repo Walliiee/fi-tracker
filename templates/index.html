@@ -35,16 +35,27 @@
 
 <!-- Fundraising -->
 <div class="panel" id="panel-fundraising">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-    <h2>Fundraising</h2>
-    <button class="btn" onclick="openFundraisingModal()">+ Add</button>
+  <!-- Summary bar -->
+  <div class="fundraising-summary" id="fundraising-summary"></div>
+  <!-- Kanban board -->
+  <div class="kanban-board" id="kanban-fundraising">
+    <div class="kanban-col" data-status="identified">
+      <div class="kanban-col-header"><span>Identified</span><button class="btn btn-sm" onclick="openFundraisingModal(null,'identified')">+</button></div>
+      <div class="kanban-cards" id="kanban-identified"></div>
+    </div>
+    <div class="kanban-col" data-status="applied">
+      <div class="kanban-col-header"><span>Applied</span><button class="btn btn-sm" onclick="openFundraisingModal(null,'applied')">+</button></div>
+      <div class="kanban-cards" id="kanban-applied"></div>
+    </div>
+    <div class="kanban-col" data-status="received">
+      <div class="kanban-col-header"><span>Received</span><button class="btn btn-sm" onclick="openFundraisingModal(null,'received')">+</button></div>
+      <div class="kanban-cards" id="kanban-received"></div>
+    </div>
+    <div class="kanban-col" data-status="rejected">
+      <div class="kanban-col-header"><span>Rejected</span><button class="btn btn-sm" onclick="openFundraisingModal(null,'rejected')">+</button></div>
+      <div class="kanban-cards" id="kanban-rejected"></div>
+    </div>
   </div>
-  <table>
-    <thead><tr>
-      <th>Name</th><th>Ansøgt (kr)</th><th>Modtaget (kr)</th><th>Status</th><th>Deadline</th><th>Notes</th><th></th>
-    </tr></thead>
-    <tbody id="tb-fundraising"></tbody>
-  </table>
 </div>
 
 <!-- Fund Pipeline -->
@@ -58,6 +69,7 @@
       <th>Fund</th><th>Estimat (kr)</th><th>Deadline</th><th>Status</th><th>Notes</th><th></th>
     </tr></thead>
     <tbody id="tb-fund-pipeline"></tbody>
+    <tfoot id="tf-fund-pipeline"></tfoot>
   </table>
 </div>
 
@@ -83,16 +95,22 @@
 
 <!-- Ideas -->
 <div class="panel" id="panel-ideas">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
     <h2>Ideas</h2>
-    <button class="btn" onclick="openIdeaModal()">+ Add</button>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <select id="idea-status-filter" class="form-select" onchange="loadIdeas()">
+        <option value="">All statuses</option>
+        <option value="new">New</option>
+        <option value="discussed">Discussed</option>
+        <option value="approved">Approved</option>
+        <option value="archived">Archived</option>
+      </select>
+      <button class="btn" onclick="openIdeaModal()">+ Add</button>
+    </div>
   </div>
-  <table>
-    <thead><tr>
-      <th>Title</th><th>Category</th><th>Status</th><th>Description</th><th></th>
-    </tr></thead>
-    <tbody id="tb-ideas"></tbody>
-  </table>
+  <!-- Tag filter bar -->
+  <div class="tag-filter-bar" id="tag-filter-bar"></div>
+  <div class="ideas-cards" id="ideas-cards"></div>
 </div>
 
 <!-- Årshjul -->
@@ -219,9 +237,10 @@
     <div class="form-group"><label>Title</label><input id="idea-title" placeholder="Title"></div>
     <div class="form-group"><label>Description</label><textarea id="idea-description"></textarea></div>
     <div class="form-group"><label>Category</label><input id="idea-category" placeholder="e.g. aktivitet, samarbejde, funding"></div>
+    <div class="form-group"><label>Tags (comma-separated)</label><input id="idea-tags" placeholder="e.g. funding, aktivitet"></div>
     <div class="form-group">
       <label>Status</label>
-      <select id="idea-status"><option value="new">New</option><option value="exploring">Exploring</option><option value="approved">Approved</option><option value="dropped">Dropped</option></select>
+      <select id="idea-status"><option value="new">New</option><option value="discussed">Discussed</option><option value="approved">Approved</option><option value="archived">Archived</option></select>
     </div>
     <div class="modal-actions"><button class="btn" onclick="saveIdea()">Gem</button></div>
   </div>
@@ -388,38 +407,85 @@ document.querySelectorAll('.sub-tab').forEach(st => {
 });
 
 // ── FUNDRAISING ─────────────────────────────────────────────────────────────
+let fundraisingCache = [];
+
 function loadFundraising() {
   fetch(`${API}/fundraising`).then(r => r.json()).then(rows => {
-    const tb = document.getElementById('tb-fundraising');
-    tb.innerHTML = rows.length ? rows.map(r => `
-      <tr>
-        <td>${r.name}</td>
-        <td>${r.amount_applied ? r.amount_applied.toLocaleString() : '—'}</td>
-        <td>${r.amount_received ? r.amount_received.toLocaleString() : '—'}</td>
-        <td>${badge(r.status, r.status)}</td>
-        <td>${r.deadline || '—'}</td>
-        <td>${r.notes || ''}</td>
-        <td><button class="btn btn-sm" onclick="editFundraising(${r.id})">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="del('${API}/fundraising/${r.id}', loadFundraising)">🗑️</button></td>
-      </tr>`).join('') : '<tr><td colspan="7" style="color:#666;text-align:center;padding:2rem;">Ingen fundraising — endnu</td></tr>';
+    fundraisingCache = rows;
+    renderFundraisingKanban(rows);
+    renderFundraisingSummary(rows);
   });
 }
 
-function openFundraisingModal(row) {
+function renderFundraisingSummary(rows) {
+  const totalApplied = rows.reduce((s, r) => s + (r.amount_applied || 0), 0);
+  const totalReceived = rows.reduce((s, r) => s + (r.amount_received || 0), 0);
+  const winRate = totalApplied > 0 ? Math.round(totalReceived / totalApplied * 100) : 0;
+  const openCount = rows.filter(r => ['identified','applied','approved'].includes(r.status)).length;
+  document.getElementById('fundraising-summary').innerHTML = `
+    <div class="summary-stat"><span class="summary-value">${totalApplied.toLocaleString()}</span><span class="summary-label">kr ansøgt</span></div>
+    <div class="summary-stat"><span class="summary-value" style="color:#60cc80">${totalReceived.toLocaleString()}</span><span class="summary-label">kr modtaget</span></div>
+    <div class="summary-stat"><span class="summary-value" style="color:#e0c060">${winRate}%</span><span class="summary-label">win rate</span></div>
+    <div class="summary-stat"><span class="summary-value" style="color:#5ba0e0">${openCount}</span><span class="summary-label">open</span></div>
+  `;
+}
+
+function renderFundraisingKanban(rows) {
+  const statuses = ['identified','applied','received','rejected'];
+  const today = new Date().toISOString().slice(0,10);
+  statuses.forEach(status => {
+    const col = document.getElementById('kanban-' + status);
+    const cards = rows.filter(r => r.status === status || (status === 'applied' && r.status === 'approved'));
+    col.innerHTML = cards.map(r => {
+      const deadlineNear = r.deadline && r.deadline < today;
+      const deadline30 = r.deadline && (new Date(r.deadline) - new Date()) / 86400000 < 30;
+      const dlClass = deadlineNear ? 'deadline-overdue' : (deadline30 ? 'deadline-soon' : '');
+      const amt = r.status === 'received' ? r.amount_received : r.amount_applied;
+      return `<div class="kanban-card" draggable="true" data-id="${r.id}" ondragstart="onKanbanDrag(event, ${r.id})">
+        <div class="kanban-card-title">${r.name}</div>
+        ${amt ? `<div class="kanban-card-amount">${amt.toLocaleString()} kr</div>` : ''}
+        ${r.deadline ? `<div class="kanban-card-deadline ${dlClass}">📅 ${r.deadline}</div>` : ''}
+        ${r.notes ? `<div class="kanban-card-notes">${r.notes.slice(0,60)}${r.notes.length > 60 ? '…' : ''}</div>` : ''}
+        <div class="kanban-card-actions">
+          <button class="btn btn-sm" onclick="editFundraising(${r.id})">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="del('${API}/fundraising/${r.id}', loadFundraising)">🗑️</button>
+        </div>
+      </div>`;
+    }).join('') || '<div class="kanban-empty">—</div>';
+  });
+  // Setup drop zones
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('kanban-drop-hover'); });
+    col.addEventListener('dragleave', () => col.classList.remove('kanban-drop-hover'));
+    col.addEventListener('drop', e => {
+      e.preventDefault();
+      col.classList.remove('kanban-drop-hover');
+      const id = e.dataTransfer.getData('text/plain');
+      const newStatus = col.dataset.status;
+      fetch(`${API}/fundraising/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({status: newStatus}) })
+        .then(() => loadFundraising());
+    });
+  });
+}
+
+function onKanbanDrag(e, id) {
+  e.dataTransfer.setData('text/plain', id);
+}
+
+function openFundraisingModal(row, prefillStatus) {
   document.getElementById('fr-id').value = row ? row.id : '';
   document.getElementById('fr-name').value = row ? row.name : '';
   document.getElementById('fr-amount-applied').value = row ? row.amount_applied || '' : '';
   document.getElementById('fr-amount-received').value = row ? row.amount_received || '' : '';
-  document.getElementById('fr-status').value = row ? row.status : 'identified';
+  document.getElementById('fr-status').value = row ? row.status : (prefillStatus || 'identified');
   document.getElementById('fr-deadline').value = row ? row.deadline || '' : '';
   document.getElementById('fr-notes').value = row ? row.notes || '' : '';
   document.getElementById('modal-fundraising').classList.add('open');
 }
 
 function editFundraising(id) {
-  fetch(`${API}/fundraising`).then(r => r.json()).then(rows => {
-    openFundraisingModal(rows.find(r => r.id === id));
-  });
+  const row = fundraisingCache.find(r => r.id === id);
+  if (row) openFundraisingModal(row);
 }
 
 function saveFundraising() {
@@ -442,23 +508,34 @@ function saveFundraising() {
 function loadFundPipeline() {
   fetch(`${API}/fund-pipeline`).then(r => r.json()).then(rows => {
     const tb = document.getElementById('tb-fund-pipeline');
-    tb.innerHTML = rows.length ? rows.map(r => `
-      <tr>
+    const today = new Date().toISOString().slice(0,10);
+    const in14 = new Date(Date.now() + 14*86400000).toISOString().slice(0,10);
+    const fpStatusColors = {todo:'grey',in_progress:'#5ba0e0',submitted:'#e0c060',approved:'#60cc80',rejected:'#cc6060',skip:'#666'};
+    tb.innerHTML = rows.length ? rows.map(r => {
+      const dlOverdue = r.deadline && r.deadline < today;
+      const dlSoon = !dlOverdue && r.deadline && r.deadline <= in14;
+      const dlClass = dlOverdue ? 'deadline-overdue' : (dlSoon ? 'deadline-soon' : '');
+      const sc = fpStatusColors[r.status] || '#888';
+      return `<tr onclick="editFundPipeline(${r.id})" style="cursor:pointer">
         <td>${r.fund_name}</td>
         <td>${r.amount_estimate ? r.amount_estimate.toLocaleString() : '—'}</td>
-        <td>${r.deadline || '—'}</td>
-        <td>${badge(r.status, r.status)}</td>
+        <td class="${dlClass}">${r.deadline || '—'}</td>
+        <td><span class="badge" style="background:${sc}30;color:${sc}">${r.status}</span></td>
         <td>${r.notes || ''}</td>
-        <td><button class="btn btn-sm" onclick="editFundPipeline(${r.id})">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="del('${API}/fund-pipeline/${r.id}', loadFundPipeline)">🗑️</button></td>
-      </tr>`).join('') : '<tr><td colspan="6" style="color:#666;text-align:center;padding:2rem;">Ingen fonde — endnu</td></tr>';
+        <td><button class="btn btn-sm" onclick="event.stopPropagation();editFundPipeline(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();del('${API}/fund-pipeline/${r.id}', loadFundPipeline)">🗑️</button></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" style="color:#666;text-align:center;padding:2rem;">Ingen fonde — endnu</td></tr>';
+    // Total row
+    const total = rows.filter(r => r.status !== 'rejected' && r.status !== 'skip').reduce((s, r) => s + (r.amount_estimate || 0), 0);
+    document.getElementById('tf-fund-pipeline').innerHTML = `<tr style="border-top:2px solid #2a2d3a;font-weight:700"><td>Total (excl. rejected)</td><td>${total.toLocaleString()} kr</td><td colspan="4"></td></tr>`;
   });
 }
 
 function openFundPipelineModal(row) {
   document.getElementById('fp-id').value = row ? row.id : '';
   document.getElementById('fp-fund-name').value = row ? row.fund_name : '';
-  document.getElementById('fp-description').value = row ? r.description || '' : '';
+  document.getElementById('fp-description').value = row ? row.description || '' : '';
   document.getElementById('fp-amount-estimate').value = row ? row.amount_estimate || '' : '';
   document.getElementById('fp-deadline').value = row ? row.deadline || '' : '';
   document.getElementById('fp-status').value = row ? row.status : 'todo';
@@ -566,19 +643,77 @@ function saveTask() {
 }
 
 // ── IDEAS ───────────────────────────────────────────────────────────────────
+let ideasCache = [];
+let activeTagFilter = '';
+
+function hashColor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = str.charCodeAt(i) + ((h << 5) - h);
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue}, 60%, 45%)`;
+}
+
 function loadIdeas() {
   fetch(`${API}/ideas`).then(r => r.json()).then(rows => {
-    const tb = document.getElementById('tb-ideas');
-    tb.innerHTML = rows.length ? rows.map(r => `
-      <tr>
-        <td>${r.title}</td>
-        <td>${r.category || '—'}</td>
-        <td>${badge(r.status, r.status)}</td>
-        <td>${r.description || ''}</td>
-        <td><button class="btn btn-sm" onclick="editIdea(${r.id})">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="del('${API}/ideas/${r.id}', loadIdeas)">🗑️</button></td>
-      </tr>`).join('') : '<tr><td colspan="5" style="color:#666;text-align:center;padding:2rem;">Ingen idéer — endnu</td></tr>';
+    ideasCache = rows;
+    renderIdeas();
   });
+}
+
+function renderIdeas() {
+  let rows = ideasCache;
+  const statusFilter = document.getElementById('idea-status-filter').value;
+  if (statusFilter) rows = rows.filter(r => r.status === statusFilter);
+  if (activeTagFilter) rows = rows.filter(r => (r.tags||'').split(',').map(t=>t.trim()).includes(activeTagFilter));
+
+  // Build tag filter bar
+  const allTags = [...new Set(ideasCache.flatMap(r => (r.tags||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort();
+  document.getElementById('tag-filter-bar').innerHTML = allTags.map(t =>
+    `<span class="tag-chip ${activeTagFilter===t?'tag-chip-active':''}" style="background:${hashColor(t)}30;color:${hashColor(t)}" onclick="toggleTagFilter('${t}')">${t}</span>`
+  ).join('');
+
+  const ideaStatusColors = {new:'#aaa',discussed:'#e0c060',approved:'#60cc80',archived:'#666'};
+  const container = document.getElementById('ideas-cards');
+  container.innerHTML = rows.length ? rows.map(r => {
+    const tags = (r.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const sc = ideaStatusColors[r.status] || '#888';
+    return `<div class="idea-card">
+      <div class="idea-card-header">
+        <span class="idea-title">${r.title}</span>
+        <span class="badge" style="background:${sc}30;color:${sc}">${r.status}</span>
+      </div>
+      ${r.description ? `<div class="idea-desc">${r.description}</div>` : ''}
+      ${r.category ? `<div class="idea-category">📁 ${r.category}</div>` : ''}
+      ${tags.length ? `<div class="idea-tags">${tags.map(t => `<span class="tag-chip" style="background:${hashColor(t)}30;color:${hashColor(t)}">${t}</span>`).join('')}</div>` : ''}
+      <div class="idea-card-footer">
+        <div class="idea-votes">
+          <button class="vote-btn" onclick="voteIdea(${r.id}, 1)">👍</button>
+          <span class="vote-score">${r.vote_score || 0}</span>
+          <button class="vote-btn" onclick="voteIdea(${r.id}, -1)">👎</button>
+        </div>
+        <div class="idea-actions">
+          ${r.status !== 'approved' ? `<button class="btn btn-sm" style="background:#60cc80;color:#000" onclick="approveIdea(${r.id})">✓ Approve</button>` : ''}
+          <button class="btn btn-sm" onclick="editIdea(${r.id})">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="del('${API}/ideas/${r.id}', loadIdeas)">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty-state">Ingen idéer — endnu</div>';
+}
+
+function toggleTagFilter(tag) {
+  activeTagFilter = activeTagFilter === tag ? '' : tag;
+  renderIdeas();
+}
+
+function voteIdea(id, dir) {
+  fetch(`${API}/ideas/${id}/vote`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({direction: dir}) })
+    .then(() => loadIdeas());
+}
+
+function approveIdea(id) {
+  fetch(`${API}/ideas/${id}/approve`, { method:'POST' })
+    .then(() => { loadIdeas(); loadTasks(); });
 }
 
 function openIdeaModal(row) {
@@ -586,14 +721,14 @@ function openIdeaModal(row) {
   document.getElementById('idea-title').value = row ? row.title : '';
   document.getElementById('idea-description').value = row ? row.description || '' : '';
   document.getElementById('idea-category').value = row ? row.category || '' : '';
+  document.getElementById('idea-tags').value = row ? row.tags || '' : '';
   document.getElementById('idea-status').value = row ? row.status : 'new';
   document.getElementById('modal-idea').classList.add('open');
 }
 
 function editIdea(id) {
-  fetch(`${API}/ideas`).then(r => r.json()).then(rows => {
-    openIdeaModal(rows.find(r => r.id === id));
-  });
+  const row = ideasCache.find(r => r.id === id);
+  if (row) openIdeaModal(row);
 }
 
 function saveIdea() {
@@ -602,6 +737,7 @@ function saveIdea() {
     title: document.getElementById('idea-title').value,
     description: document.getElementById('idea-description').value,
     category: document.getElementById('idea-category').value || null,
+    tags: document.getElementById('idea-tags').value || '',
     status: document.getElementById('idea-status').value
   };
   const url = id ? `${API}/ideas/${id}` : `${API}/ideas`;

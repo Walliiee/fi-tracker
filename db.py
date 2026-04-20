@@ -25,7 +25,16 @@ def _migrate():
     try:
         conn.execute('ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0')
     except Exception:
-        pass  # column already exists
+        pass
+    try:
+        conn.execute('ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0')
+    except Exception:
+        pass
+    try:
+        conn.execute('ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""')
+    except Exception:
+        pass
+    conn.commit()
     conn.close()
 
 def _seed_events():

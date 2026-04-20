@@ -547,4 +547,255 @@ tr.task-overdue td {
   .tabs { padding: 0 0.5rem; }
   .tab { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
   .banner-chips { max-height: 120px; overflow-y: auto; }
+  .kanban-board { flex-direction: column; }
+  .ideas-cards { grid-template-columns: 1fr; }
 }
+
+/* Fundraising Summary Bar */
+.fundraising-summary {
+  display: flex;
+  gap: 1.5rem;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1rem;
+  justify-content: space-around;
+}
+
+.summary-stat {
+  text-align: center;
+}
+
+.summary-value {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #5ba0e0;
+}
+
+.summary-label {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Kanban Board */
+.kanban-board {
+  display: flex;
+  gap: 0.75rem;
+  min-height: 300px;
+}
+
+.kanban-col {
+  flex: 1;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-height: 200px;
+}
+
+.kanban-col.kanban-drop-hover {
+  border-color: #6c63ff;
+  background: #1a1d2f;
+}
+
+.kanban-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #ccc;
+  border-bottom: 1px solid #2a2d3a;
+  margin-bottom: 0.5rem;
+}
+
+.kanban-cards {
+  min-height: 80px;
+}
+
+.kanban-empty {
+  text-align: center;
+  color: #444;
+  padding: 2rem 0;
+  font-size: 0.8rem;
+}
+
+.kanban-card {
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
+  cursor: grab;
+  transition: all 0.15s;
+}
+
+.kanban-card:hover {
+  border-color: #3a3d4a;
+}
+
+.kanban-card.dragging {
+  opacity: 0.5;
+}
+
+.kanban-card-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.kanban-card-amount {
+  color: #60cc80;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.kanban-card-deadline {
+  font-size: 0.72rem;
+  color: #888;
+}
+
+.kanban-card-deadline.deadline-overdue {
+  color: #cc6060;
+  font-weight: 600;
+}
+
+.kanban-card-deadline.deadline-soon {
+  color: #e0c060;
+}
+
+.kanban-card-notes {
+  font-size: 0.72rem;
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+.kanban-card-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+
+/* Deadline colors for table cells */
+.deadline-overdue {
+  color: #cc6060 !important;
+  font-weight: 600;
+}
+
+.deadline-soon {
+  color: #e0c060 !important;
+}
+
+/* Ideas Cards */
+.ideas-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.idea-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.idea-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.idea-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.idea-desc {
+  color: #aaa;
+  font-size: 0.82rem;
+  margin-bottom: 0.5rem;
+}
+
+.idea-category {
+  font-size: 0.78rem;
+  color: #888;
+  margin-bottom: 0.25rem;
+}
+
+.idea-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.tag-chip {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tag-chip-active {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.tag-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.idea-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #2a2d3a;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.idea-votes {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.vote-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.vote-btn:hover {
+  transform: scale(1.2);
+}
+
+.vote-score {
+  font-weight: 700;
+  font-size: 0.95rem;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.idea-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Idea status badges */
+.badge-discussed { background: #3a2e00; color: #e0c060; }
+.badge-archived { background: #2a2a2a; color: #666; }

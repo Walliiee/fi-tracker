@@ -46,11 +46,18 @@ def handle_fundraising(id):
         conn.close()
         return jsonify({'deleted': id})
     data = request.json
+    # Support partial update: fetch existing, merge
+    existing = conn.execute('SELECT * FROM fundraising WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    existing = dict(existing)
+    merged = {**existing, **data}
     conn.execute(
         '''UPDATE fundraising SET name=?, amount_applied=?, amount_received=?, status=?, deadline=?, notes=?
            WHERE id=?''',
-        (data.get('name'), data.get('amount_applied'), data.get('amount_received'),
-         data.get('status'), data.get('deadline'), data.get('notes'), id)
+        (merged['name'], merged.get('amount_applied'), merged.get('amount_received'),
+         merged['status'], merged.get('deadline'), merged.get('notes'), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM fundraising WHERE id=?', (id,)).fetchone()
@@ -147,7 +154,7 @@ def handle_task(id):
 @app.route('/api/ideas', methods=['GET'])
 def get_ideas():
     conn = db_module.get_db()
-    rows = conn.execute('SELECT * FROM ideas ORDER BY created_at DESC').fetchall()
+    rows = conn.execute('SELECT * FROM ideas ORDER BY vote_score DESC, created_at DESC').fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
@@ -156,10 +163,10 @@ def create_idea():
     data = request.json
     conn = db_module.get_db()
     cur = conn.execute(
-        '''INSERT INTO ideas (title, description, category, status)
-           VALUES (?, ?, ?, ?)''',
+        '''INSERT INTO ideas (title, description, category, status, vote_score, tags)
+           VALUES (?, ?, ?, ?, ?, ?)''',
         (data.get('title'), data.get('description'), data.get('category'),
-         data.get('status', 'new'))
+         data.get('status', 'new'), data.get('vote_score', 0), data.get('tags', ''))
     )
     conn.commit()
     row = conn.execute('SELECT * FROM ideas WHERE id=?', (cur.lastrowid,)).fetchone()
@@ -176,8 +183,9 @@ def handle_idea(id):
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
-        '''UPDATE ideas SET title=?, description=?, category=?, status=? WHERE id=?''',
-        (data.get('title'), data.get('description'), data.get('category'), data.get('status'), id)
+        '''UPDATE ideas SET title=?, description=?, category=?, status=?, vote_score=?, tags=? WHERE id=?''',
+        (data.get('title'), data.get('description'), data.get('category'), data.get('status'),
+         data.get('vote_score', 0), data.get('tags', ''), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
@@ -185,6 +193,35 @@ def handle_idea(id):
     return jsonify(dict(row))
 
 # ── events (årshjul) ───────────────────────────────────────────────────────────
+@app.route('/api/ideas/<int:id>/vote', methods=['POST'])
+def vote_idea(id):
+    data = request.json
+    direction = data.get('direction', 0)  # +1 or -1
+    conn = db_module.get_db()
+    conn.execute('UPDATE ideas SET vote_score = vote_score + ? WHERE id=?', (direction, id))
+    conn.commit()
+    row = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
+    conn.close()
+    return jsonify(dict(row))
+
+@app.route('/api/ideas/<int:id>/approve', methods=['POST'])
+def approve_idea(id):
+    conn = db_module.get_db()
+    # Update idea status
+    conn.execute('UPDATE ideas SET status="approved" WHERE id=?', (id,))
+    # Get idea title for task
+    idea = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
+    if idea:
+        conn.execute(
+            '''INSERT INTO tasks (title, assignee, status, priority, due_date, notes)
+               VALUES (?, NULL, "todo", "medium", NULL, ?)''',
+            (idea['title'], f'From approved idea #{id}')
+        )
+    conn.commit()
+    row = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
+    conn.close()
+    return jsonify(dict(row))
+
 @app.route('/api/events', methods=['GET'])
 def get_events():
     conn = db_module.get_db()
