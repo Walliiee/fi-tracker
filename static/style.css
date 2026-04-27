@@ -316,8 +316,8 @@ tr.task-overdue td {
 .badge-done { background: #1e4a2a; color: #60cc80; }
 .badge-started { background: #3a2e00; color: #e0c060; }
 .badge-new { background: #2a2d3a; color: #aaa; }
-.badge-exploring { background: #3a2e00; color: #e0c060; }
-.badge-approved { background: #1e4a2a; color: #60cc80; }
+.badge-discussed { background: #3a2e00; color: #e0c060; }
+.badge-archived { background: #2a2020; color: #888; }
 .badge-dropped { background: #4a1e1e; color: #cc6060; }
 
 .priority-high { color: #cc6060; }

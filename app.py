@@ -1,6 +1,9 @@
 import os
+import logging
 from flask import Flask, jsonify, request, send_from_directory
 import db as db_module
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
@@ -10,6 +13,25 @@ db_module.init_db()
 def handle_exception(e):
     app.logger.error('Unhandled exception: %s', e, exc_info=True)
     return jsonify({'error': 'Internal server error', 'detail': str(e)}), 500
+
+def _require(data, *fields):
+    """Return a 400 error response if any required field is missing/blank, else None."""
+    missing = [f for f in fields if not data.get(f)]
+    if missing:
+        return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
+    return None
+
+# ── health ───────────────────────────────────────────────────────────────────
+@app.route('/health', methods=['GET'])
+def health():
+    try:
+        conn = db_module.get_db()
+        conn.execute('SELECT 1').fetchone()
+        conn.close()
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        app.logger.error('Health check failed: %s', e)
+        return jsonify({'status': 'error', 'detail': str(e)}), 503
 
 # ── status ──────────────────────────────────────────────────────────────────
 @app.route('/api/status', methods=['GET'])
@@ -30,7 +52,10 @@ def get_fundraising():
 
 @app.route('/api/fundraising', methods=['POST'])
 def create_fundraising():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'name')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO fundraising (name, amount_applied, amount_received, status, deadline, notes)
@@ -41,6 +66,7 @@ def create_fundraising():
     conn.commit()
     row = conn.execute('SELECT * FROM fundraising WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('fundraising created id=%s name=%s', cur.lastrowid, data.get('name'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/fundraising/<int:id>', methods=['PUT', 'DELETE'])
@@ -50,6 +76,7 @@ def handle_fundraising(id):
         conn.execute('DELETE FROM fundraising WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('fundraising deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     # Support partial update: fetch existing, merge
@@ -80,7 +107,10 @@ def get_fund_pipeline():
 
 @app.route('/api/fund-pipeline', methods=['POST'])
 def create_fund_pipeline():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'fund_name')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO fund_pipeline (fund_name, description, amount_estimate, deadline, status, notes)
@@ -91,6 +121,7 @@ def create_fund_pipeline():
     conn.commit()
     row = conn.execute('SELECT * FROM fund_pipeline WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('fund_pipeline created id=%s name=%s', cur.lastrowid, data.get('fund_name'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/fund-pipeline/<int:id>', methods=['PUT', 'DELETE'])
@@ -100,6 +131,7 @@ def handle_fund_pipeline(id):
         conn.execute('DELETE FROM fund_pipeline WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('fund_pipeline deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
@@ -123,7 +155,10 @@ def get_tasks():
 
 @app.route('/api/tasks', methods=['POST'])
 def create_task():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'title')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO tasks (title, assignee, status, priority, due_date, notes)
@@ -134,6 +169,7 @@ def create_task():
     conn.commit()
     row = conn.execute('SELECT * FROM tasks WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('task created id=%s title=%s', cur.lastrowid, data.get('title'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/tasks/<int:id>', methods=['PUT', 'DELETE'])
@@ -143,6 +179,7 @@ def handle_task(id):
         conn.execute('DELETE FROM tasks WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('task deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
@@ -166,7 +203,10 @@ def get_ideas():
 
 @app.route('/api/ideas', methods=['POST'])
 def create_idea():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'title')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO ideas (title, description, category, status, vote_score, tags)
@@ -177,6 +217,7 @@ def create_idea():
     conn.commit()
     row = conn.execute('SELECT * FROM ideas WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('idea created id=%s title=%s', cur.lastrowid, data.get('title'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/ideas/<int:id>', methods=['PUT', 'DELETE'])
@@ -186,6 +227,7 @@ def handle_idea(id):
         conn.execute('DELETE FROM ideas WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('idea deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
@@ -201,8 +243,10 @@ def handle_idea(id):
 # ── events (årshjul) ───────────────────────────────────────────────────────────
 @app.route('/api/ideas/<int:id>/vote', methods=['POST'])
 def vote_idea(id):
-    data = request.json
-    direction = data.get('direction', 0)  # +1 or -1
+    data = request.json or {}
+    direction = data.get('direction', 0)
+    if direction not in (1, -1):
+        return jsonify({'error': 'direction must be 1 or -1'}), 400
     conn = db_module.get_db()
     conn.execute('UPDATE ideas SET vote_score = vote_score + ? WHERE id=?', (direction, id))
     conn.commit()
@@ -237,7 +281,10 @@ def get_events():
 
 @app.route('/api/events', methods=['POST'])
 def create_event():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'title', 'event_date')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO events (title, event_date, end_date, category, description, recurring, needs_comms)
@@ -249,6 +296,7 @@ def create_event():
     conn.commit()
     row = conn.execute('SELECT * FROM events WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('event created id=%s title=%s date=%s', cur.lastrowid, data.get('title'), data.get('event_date'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/events/<int:id>', methods=['PUT', 'DELETE'])
@@ -258,6 +306,7 @@ def handle_event(id):
         conn.execute('DELETE FROM events WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('event deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
@@ -282,7 +331,10 @@ def get_content_posts():
 
 @app.route('/api/content-posts', methods=['POST'])
 def create_content_post():
-    data = request.json
+    data = request.json or {}
+    err = _require(data, 'title')
+    if err:
+        return err
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO content_posts (title, platform, planned_date, status, event_id, posted_by, link, notes)
@@ -294,6 +346,7 @@ def create_content_post():
     conn.commit()
     row = conn.execute('SELECT * FROM content_posts WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
+    app.logger.info('content_post created id=%s title=%s', cur.lastrowid, data.get('title'))
     return jsonify(dict(row)), 201
 
 @app.route('/api/content-posts/<int:id>', methods=['PUT', 'DELETE'])
@@ -303,6 +356,7 @@ def handle_content_post(id):
         conn.execute('DELETE FROM content_posts WHERE id=?', (id,))
         conn.commit()
         conn.close()
+        app.logger.info('content_post deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
     conn.execute(
