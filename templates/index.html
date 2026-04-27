@@ -80,23 +80,6 @@
     <div class="report-result" id="report-result"></div>
   </div>
   <div style="border-top:1px solid #2a2d3a;margin:1.5rem 0 0;"></div>
-
-  <div class="report-toolbar">
-    <button class="btn btn-sm" onclick="window.print()">🖨️ Print Report</button>
-  </div>
-  <div class="report-section" id="report-section">
-    <h2 style="margin: 1.5rem 0 0.75rem;font-size:1rem;color:#aaa;">AI Report Generator</h2>
-    <div class="report-controls">
-      <label>From: <input type="date" id="report-from"></label>
-      <label>To: <input type="date" id="report-to"></label>
-      <button class="btn" id="btn-generate-report" onclick="generateReport()">Generate</button>
-    </div>
-    <div class="report-loading" id="report-loading" style="display:none;">
-      <div class="spinner"></div> Generating report...
-    </div>
-    <div class="report-result" id="report-result"></div>
-  </div>
-  <div style="border-top:1px solid #2a2d3a;margin:1.5rem 0 0;"></div>
 <div class="dashboard-grid" id="dashboard-grid">
     <!-- Cards will be populated by JS -->
   </div>
@@ -132,7 +115,7 @@
 <!-- Fund Pipeline -->
 <div class="panel" id="panel-fund-pipeline">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-    <button class="btn btn-sm" onclick="window.open('/api/export/fundraising','_blank')">⬇️ Export</button>
+    <button class="btn btn-sm" onclick="window.open('/api/export/fund-pipeline','_blank')">⬇️ Export</button>
     <h2>Fund Pipeline</h2>
     <button class="btn" onclick="openFundPipelineModal()">+ Add</button>
   </div>
@@ -214,7 +197,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
     <h2>Communications</h2>
     <div style="display:flex;gap:0.5rem;">
-      <button class="btn btn-sm" onclick="window.open('/api/export/fundraising','_blank')">⬇️ Export</button>
+      <button class="btn btn-sm" onclick="window.open('/api/export/content-posts','_blank')">⬇️ Export</button>
       <button class="btn" onclick="openContentPostModal()">+ Add Post</button>
     </div>
   </div>
@@ -417,6 +400,11 @@
 // ── helpers ────────────────────────────────────────────────────────────────
 const API = '/api';
 
+function fmtDate(str) {
+  if (!str) return '';
+  return str.slice(0, 10);
+}
+
 function badge(cls, txt) {
   return `<span class="badge badge-${txt.toLowerCase().replace(' ', '_')}">${txt}</span>`;
 }
@@ -543,7 +531,7 @@ function renderFundraisingSummary(rows) {
 
 function renderFundraisingKanban(rows) {
   const statuses = ['identified','applied','received','rejected'];
-  const today = new Date().toISOString().slice(0,10);
+  const today = fmtDate(new Date().toISOString());
   statuses.forEach(status => {
     const col = document.getElementById('kanban-' + status);
     const cards = rows.filter(r => r.status === status || (status === 'applied' && r.status === 'approved'));
@@ -639,8 +627,8 @@ async function loadFundPipeline() {
     const rows = await r.json();
     
     const tb = document.getElementById('tb-fund-pipeline');
-    const today = new Date().toISOString().slice(0,10);
-    const in14 = new Date(Date.now() + 14*86400000).toISOString().slice(0,10);
+    const today = fmtDate(new Date().toISOString());
+    const in14 = fmtDate(new Date(Date.now() + 14*86400000).toISOString());
     const fpStatusColors = {todo:'grey',in_progress:'#5ba0e0',submitted:'#e0c060',approved:'#60cc80',rejected:'#cc6060',skip:'#666'};
     
     if (rows.length === 0) {
@@ -737,7 +725,7 @@ async function loadTasks() {
       rows = rows.filter(r => r.assignee === filterAssignee);
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = fmtDate(new Date().toISOString());
     const tb = document.getElementById('tb-tasks');
     
     if (rows.length === 0) {
@@ -1118,7 +1106,7 @@ function renderContentCalendar() {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${commsYear}-${String(commsMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const dayPosts = posts.filter(p => p.planned_date === dateStr);
-      const isToday = dateStr === new Date().toISOString().slice(0,10);
+      const isToday = dateStr === fmtDate(new Date().toISOString());
       html += `<div class="cal-cell${isToday ? ' today' : ''}">
         <div class="cal-date">${d}</div>
         ${dayPosts.map(p => {
@@ -1313,7 +1301,7 @@ function renderDashboard(data) {
     <div class="activity-item">
       <span class="activity-badge">${moduleBadges[item.module] || item.module}</span>
       <span class="activity-title">${item.title}</span>
-      <span class="activity-time">${new Date(item.created_at).toLocaleDateString('da-DK')}</span>
+      <span class="activity-time">${fmtDate(item.created_at)}</span>
     </div>
   `).join('');
 
@@ -1406,7 +1394,7 @@ function generateReport() {
 (function() {
   const today = new Date();
   const thirtyDaysAgo = new Date(today - 30 * 86400000);
-  const fmt = d => d.toISOString().slice(0, 10);
+  const fmt = d => fmtDate(d.toISOString());
   const toInput = document.getElementById('report-to');
   const fromInput = document.getElementById('report-from');
   if (toInput) toInput.value = fmt(today);

@@ -22,20 +22,18 @@ def init_db():
 
 def _migrate():
     conn = get_db()
-    try:
-        conn.execute('ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0')
-    except Exception:
-        pass
-    try:
-        conn.execute('ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0')
-    except Exception:
-        pass
-    try:
-        conn.execute('ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""')
-    except Exception:
-        pass
+    _add_column(conn, 'ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0')
+    _add_column(conn, 'ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0')
+    _add_column(conn, 'ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""')
     conn.commit()
     conn.close()
+
+def _add_column(conn, sql):
+    try:
+        conn.execute(sql)
+    except sqlite3.OperationalError as e:
+        if 'duplicate column name' not in str(e):
+            raise
 
 def _seed_events():
     conn = get_db()
