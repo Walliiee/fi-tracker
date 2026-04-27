@@ -80,23 +80,6 @@
     <div class="report-result" id="report-result"></div>
   </div>
   <div style="border-top:1px solid #2a2d3a;margin:1.5rem 0 0;"></div>
-
-  <div class="report-toolbar">
-    <button class="btn btn-sm" onclick="window.print()">🖨️ Print Report</button>
-  </div>
-  <div class="report-section" id="report-section">
-    <h2 style="margin: 1.5rem 0 0.75rem;font-size:1rem;color:#aaa;">AI Report Generator</h2>
-    <div class="report-controls">
-      <label>From: <input type="date" id="report-from"></label>
-      <label>To: <input type="date" id="report-to"></label>
-      <button class="btn" id="btn-generate-report" onclick="generateReport()">Generate</button>
-    </div>
-    <div class="report-loading" id="report-loading" style="display:none;">
-      <div class="spinner"></div> Generating report...
-    </div>
-    <div class="report-result" id="report-result"></div>
-  </div>
-  <div style="border-top:1px solid #2a2d3a;margin:1.5rem 0 0;"></div>
 <div class="dashboard-grid" id="dashboard-grid">
     <!-- Cards will be populated by JS -->
   </div>
@@ -132,7 +115,7 @@
 <!-- Fund Pipeline -->
 <div class="panel" id="panel-fund-pipeline">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-    <button class="btn btn-sm" onclick="window.open('/api/export/fundraising','_blank')">⬇️ Export</button>
+    <button class="btn btn-sm" onclick="window.open('/api/export/fund-pipeline','_blank')">⬇️ Export</button>
     <h2>Fund Pipeline</h2>
     <button class="btn" onclick="openFundPipelineModal()">+ Add</button>
   </div>
@@ -214,7 +197,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
     <h2>Communications</h2>
     <div style="display:flex;gap:0.5rem;">
-      <button class="btn btn-sm" onclick="window.open('/api/export/fundraising','_blank')">⬇️ Export</button>
+      <button class="btn btn-sm" onclick="window.open('/api/export/content-posts','_blank')">⬇️ Export</button>
       <button class="btn" onclick="openContentPostModal()">+ Add Post</button>
     </div>
   </div>

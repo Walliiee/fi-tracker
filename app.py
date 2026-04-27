@@ -1,9 +1,15 @@
+import os
 from flask import Flask, jsonify, request, send_from_directory
 import db as db_module
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 db_module.init_db()
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error('Unhandled exception: %s', e, exc_info=True)
+    return jsonify({'error': 'Internal server error', 'detail': str(e)}), 500
 
 # ── status ──────────────────────────────────────────────────────────────────
 @app.route('/api/status', methods=['GET'])
@@ -414,7 +420,9 @@ def index():
     return send_from_directory('templates', 'index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    port = int(os.environ.get('PORT', 5002))
+    app.run(host='0.0.0.0', port=port, debug=debug)
 
 # ── CSV export helpers ────────────────────────────────────────────────────────
 def _csv_response(rows, module):
@@ -464,6 +472,20 @@ def export_events():
     rows = conn.execute('SELECT * FROM events ORDER BY event_date ASC').fetchall()
     conn.close()
     return _csv_response(rows, 'events')
+
+@app.route('/api/export/fund-pipeline', methods=['GET'])
+def export_fund_pipeline():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM fund_pipeline ORDER BY deadline ASC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'fund-pipeline')
+
+@app.route('/api/export/content-posts', methods=['GET'])
+def export_content_posts():
+    conn = db_module.get_db()
+    rows = conn.execute('SELECT * FROM content_posts ORDER BY planned_date ASC').fetchall()
+    conn.close()
+    return _csv_response(rows, 'content-posts')
 
 
 # ── Ollama AI report generator ────────────────────────────────────────────────
@@ -574,7 +596,7 @@ Skriv et kort resume pa 3-5 punkter pa dansk. Vaer konkret, ikke generisk. Naevn
     try:
         req = urllib.request.Request(
             f'{OLLAMA_URL}/api/generate',
-            data=json.dumps({'model': 'minimax-m2.7:cloud', 'prompt': prompt, 'stream': False}).encode('utf-8'),
+            data=json.dumps({'model': os.environ.get('OLLAMA_MODEL', 'minimax-m2.7:cloud'), 'prompt': prompt, 'stream': False}).encode('utf-8'),
             headers={'Content-Type': 'application/json'},
             method='POST'
         )

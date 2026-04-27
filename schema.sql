@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS ideas (
   title TEXT NOT NULL,
   description TEXT,
   category TEXT,
-  status TEXT DEFAULT 'new', -- new/exploring/approved/dropped
+  status TEXT DEFAULT 'new', -- new/discussed/approved/archived
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
