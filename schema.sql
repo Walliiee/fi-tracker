@@ -1,11 +1,13 @@
--- fundraising: individual grants/donations
+-- fundraising: individual grants/donations (unified with fund_pipeline via status='research')
 CREATE TABLE IF NOT EXISTS fundraising (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
+  description TEXT,
   amount_applied INTEGER,
   amount_received INTEGER,
-  status TEXT DEFAULT 'identified', -- identified/applied/approved/rejected/received
+  status TEXT DEFAULT 'identified', -- research/identified/applied/received/rejected
   deadline DATE,
+  budget TEXT DEFAULT '{}', -- JSON: {udstyr:25000, pr:2000, ...}
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
