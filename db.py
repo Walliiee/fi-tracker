@@ -32,17 +32,20 @@ def _migrate():
     conn.close()
 
 def _migrate_pipeline_to_fundraising(conn):
-    migrated = conn.execute("SELECT COUNT(*) FROM fundraising WHERE status='research'").fetchone()[0]
-    if migrated > 0:
-        return
     pipeline = conn.execute('SELECT * FROM fund_pipeline').fetchall()
-    for row in pipeline:
+    if not pipeline:
+        return
+    existing_names = {r['name'] for r in conn.execute(
+        "SELECT name FROM fundraising WHERE status='research'"
+    ).fetchall()}
+    to_migrate = [r for r in pipeline if r['fund_name'] not in existing_names]
+    for row in to_migrate:
         conn.execute(
             '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
                VALUES (?, ?, ?, 0, 'research', ?, '{}', ?)''',
             (row['fund_name'], row['description'], row['amount_estimate'] or 0, row['deadline'], row['notes'])
         )
-    if pipeline:
+    if to_migrate:
         conn.commit()
 
 def _add_column(conn, sql):

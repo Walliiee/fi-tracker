@@ -51,7 +51,7 @@ def _parse_budget(raw):
         return raw
     try:
         return json.loads(raw)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {}
 
 def _serialize_row(row):
@@ -73,7 +73,7 @@ def create_fundraising():
     err = _require(data, 'name')
     if err:
         return err
-    budget = json.dumps(data.get('budget') or {})
+    budget = json.dumps(_parse_budget(data.get('budget')))
     conn = db_module.get_db()
     cur = conn.execute(
         '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
@@ -103,7 +103,7 @@ def handle_fundraising(id):
         return jsonify({'error': 'not found'}), 404
     existing = dict(existing)
     merged = {**existing, **data}
-    budget = json.dumps(merged.get('budget') or {})
+    budget = json.dumps(_parse_budget(merged.get('budget')))
     conn.execute(
         '''UPDATE fundraising SET name=?, description=?, amount_applied=?, amount_received=?,
            status=?, deadline=?, budget=?, notes=? WHERE id=?''',
