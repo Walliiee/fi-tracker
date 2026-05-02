@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from flask import Flask, jsonify, request, send_from_directory
 import db as db_module
@@ -43,12 +44,28 @@ def status():
     })
 
 # ── fundraising ─────────────────────────────────────────────────────────────
+def _parse_budget(raw):
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+def _serialize_row(row):
+    d = dict(row)
+    if 'budget' in d:
+        d['budget'] = _parse_budget(d['budget'])
+    return d
+
 @app.route('/api/fundraising', methods=['GET'])
 def get_fundraising():
     conn = db_module.get_db()
     rows = conn.execute('SELECT * FROM fundraising ORDER BY created_at DESC').fetchall()
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([_serialize_row(r) for r in rows])
 
 @app.route('/api/fundraising', methods=['POST'])
 def create_fundraising():
@@ -56,18 +73,19 @@ def create_fundraising():
     err = _require(data, 'name')
     if err:
         return err
+    budget = json.dumps(data.get('budget') or {})
     conn = db_module.get_db()
     cur = conn.execute(
-        '''INSERT INTO fundraising (name, amount_applied, amount_received, status, deadline, notes)
-           VALUES (?, ?, ?, ?, ?, ?)''',
-        (data.get('name'), data.get('amount_applied'), data.get('amount_received'),
-         data.get('status', 'identified'), data.get('deadline'), data.get('notes'))
+        '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        (data.get('name'), data.get('description'), data.get('amount_applied'), data.get('amount_received'),
+         data.get('status', 'identified'), data.get('deadline'), budget, data.get('notes'))
     )
     conn.commit()
     row = conn.execute('SELECT * FROM fundraising WHERE id=?', (cur.lastrowid,)).fetchone()
     conn.close()
     app.logger.info('fundraising created id=%s name=%s', cur.lastrowid, data.get('name'))
-    return jsonify(dict(row)), 201
+    return jsonify(_serialize_row(row)), 201
 
 @app.route('/api/fundraising/<int:id>', methods=['PUT', 'DELETE'])
 def handle_fundraising(id):
@@ -79,23 +97,23 @@ def handle_fundraising(id):
         app.logger.info('fundraising deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
-    # Support partial update: fetch existing, merge
     existing = conn.execute('SELECT * FROM fundraising WHERE id=?', (id,)).fetchone()
     if not existing:
         conn.close()
         return jsonify({'error': 'not found'}), 404
     existing = dict(existing)
     merged = {**existing, **data}
+    budget = json.dumps(merged.get('budget') or {})
     conn.execute(
-        '''UPDATE fundraising SET name=?, amount_applied=?, amount_received=?, status=?, deadline=?, notes=?
-           WHERE id=?''',
-        (merged['name'], merged.get('amount_applied'), merged.get('amount_received'),
-         merged['status'], merged.get('deadline'), merged.get('notes'), id)
+        '''UPDATE fundraising SET name=?, description=?, amount_applied=?, amount_received=?,
+           status=?, deadline=?, budget=?, notes=? WHERE id=?''',
+        (merged['name'], merged.get('description'), merged.get('amount_applied'), merged.get('amount_received'),
+         merged['status'], merged.get('deadline'), budget, merged.get('notes'), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM fundraising WHERE id=?', (id,)).fetchone()
     conn.close()
-    return jsonify(dict(row))
+    return jsonify(_serialize_row(row))
 
 # ── fund_pipeline ────────────────────────────────────────────────────────────
 @app.route('/api/fund-pipeline', methods=['GET'])

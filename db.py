@@ -1,4 +1,5 @@
 import sqlite3
+import json
 import os
 
 DATABASE = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(__file__), 'data', 'fi_tracker.db'))
@@ -15,9 +16,7 @@ def init_db():
     with open(schema_path, 'r') as f:
         conn.executescript(f.read())
     conn.close()
-    # Run migrations
     _migrate()
-    # Seed events if empty
     _seed_events()
 
 def _migrate():
@@ -25,8 +24,26 @@ def _migrate():
     _add_column(conn, 'ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0')
     _add_column(conn, 'ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0')
     _add_column(conn, 'ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""')
+    _add_column(conn, 'ALTER TABLE fundraising ADD COLUMN description TEXT')
+    _add_column(conn, 'ALTER TABLE fundraising ADD COLUMN budget TEXT DEFAULT "{}"')
     conn.commit()
+    # Migrate fund_pipeline entries to fundraising as status='research'
+    _migrate_pipeline_to_fundraising(conn)
     conn.close()
+
+def _migrate_pipeline_to_fundraising(conn):
+    migrated = conn.execute("SELECT COUNT(*) FROM fundraising WHERE status='research'").fetchone()[0]
+    if migrated > 0:
+        return
+    pipeline = conn.execute('SELECT * FROM fund_pipeline').fetchall()
+    for row in pipeline:
+        conn.execute(
+            '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
+               VALUES (?, ?, ?, 0, 'research', ?, '{}', ?)''',
+            (row['fund_name'], row['description'], row['amount_estimate'] or 0, row['deadline'], row['notes'])
+        )
+    if pipeline:
+        conn.commit()
 
 def _add_column(conn, sql):
     try:
