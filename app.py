@@ -13,7 +13,7 @@ db_module.init_db()
 @app.errorhandler(Exception)
 def handle_exception(e):
     app.logger.error('Unhandled exception: %s', e, exc_info=True)
-    return jsonify({'error': 'Internal server error', 'detail': str(e)}), 500
+    return jsonify({'error': 'Internal server error'}), 500
 
 def _require(data, *fields):
     """Return a 400 error response if any required field is missing/blank, else None."""

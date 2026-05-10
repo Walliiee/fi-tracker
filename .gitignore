@@ -34,3 +34,5 @@ backups/
 # Logs
 *.log
 logs/
+*.db-shm
+*.db-wal

@@ -22,10 +22,8 @@ flyctl status
 flyctl logs
 ```
 
-## Environment variables (set if needed)
-```bash
-flyctl secrets set DATABASE_URL=/data/fi_tracker.db
-```
+## Environment variables
+The `DATABASE_URL` is already set in `fly.toml` under `[env]`. No secrets needed.
 
 ## URL
 https://fi-tracker-familieidraet.fly.dev

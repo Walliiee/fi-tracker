@@ -7,6 +7,9 @@ DATABASE = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(__file__)
 def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
+    conn.execute('PRAGMA foreign_keys=ON')
     return conn
 
 def init_db():
@@ -52,8 +55,9 @@ def _add_column(conn, sql):
     try:
         conn.execute(sql)
     except sqlite3.OperationalError as e:
-        if 'duplicate column name' not in str(e):
-            raise
+        if 'duplicate column name' in str(e):
+            return
+        raise
 
 def _seed_events():
     conn = get_db()
