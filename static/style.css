@@ -348,3 +348,48 @@ textarea.fi { resize: vertical; min-height: 64px; }
   td, th { border: 1px solid #ccc; color: #000; }
   th { background: #eee; }
 }
+
+/* ── mobile / responsive ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  #app-layout {
+    flex-direction: column;
+  }
+  #sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 12px;
+  }
+  .brand { margin-bottom: 0; padding: 4px; }
+  #sidebar-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 0;
+  }
+  .nav-item {
+    flex-direction: column;
+    gap: 0;
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+  .nav-label { font-size: 11px; }
+  .sidebar-footer { display: none; }
+  #main { padding: 12px; }
+  .panel { gap: 12px; }
+  .kanban-board {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .kanban-col { min-width: unset; }
+  .cal-grid { min-width: unset; }
+  .modal-content { width: 95vw; max-height: 90vh; }
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
