@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import time
+from functools import wraps
 from flask import Flask, jsonify, request, send_from_directory
 import db as db_module
 
@@ -8,7 +10,41 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-db_module.init_db()
+_db_initialized = False
+
+def _ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        db_module.init_db()
+        _db_initialized = True
+
+# ── simple password gate ───────────────────────────────────────────────────
+BASIC_AUTH_PASSWORD = os.environ.get('BASIC_AUTH_PASSWORD', '').strip()
+
+def _check_auth():
+    if not BASIC_AUTH_PASSWORD:
+        return True
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Basic '):
+        import base64
+        try:
+            creds = base64.b64decode(auth[6:]).decode('utf-8')
+            _, password = creds.split(':', 1)
+            return password == BASIC_AUTH_PASSWORD
+        except Exception:
+            pass
+    return False
+
+@app.before_request
+def _require_auth():
+    if request.endpoint in ('health', 'static', None):
+        return None
+    if not _check_auth():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+@app.before_request
+def _init_on_first_request():
+    _ensure_db()
 
 @app.errorhandler(Exception)
 def handle_exception(e):
@@ -560,9 +596,23 @@ def export_content_posts():
     return _csv_response(rows, 'content-posts')
 
 
+# ── rate limiting helper ─────────────────────────────────────────────────────
+_report_last_call = 0
+_REPORT_COOLDOWN = 30  # seconds
+
+def _check_report_rate():
+    global _report_last_call
+    now = time.time()
+    if now - _report_last_call < _REPORT_COOLDOWN:
+        return False
+    _report_last_call = now
+    return True
+
 # ── Ollama AI report generator ────────────────────────────────────────────────
 @app.route('/api/report', methods=['POST'])
 def generate_report():
+    if not _check_report_rate():
+        return jsonify({'error': 'Too many requests — please wait 30 seconds'}), 429
     from datetime import datetime, timedelta
     import urllib.request, urllib.error, json
 

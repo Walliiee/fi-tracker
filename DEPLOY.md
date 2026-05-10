@@ -25,5 +25,10 @@ flyctl logs
 ## Environment variables
 The `DATABASE_URL` is already set in `fly.toml` under `[env]`. No secrets needed.
 
+Optional: set a password to lock the app:
+```bash
+flyctl secrets set BASIC_AUTH_PASSWORD=your-secret-password
+```
+
 ## URL
 https://fi-tracker-familieidraet.fly.dev
