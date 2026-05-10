@@ -5,6 +5,7 @@ import time
 from functools import wraps
 from flask import Flask, jsonify, request, send_from_directory
 import db as db_module
+import secrets
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -57,6 +58,38 @@ def _require(data, *fields):
     if missing:
         return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
     return None
+
+
+# CSRF: generate token on GET, validate on state-changing methods
+@app.before_request
+def csrf_middleware():
+    if request.endpoint == 'csrf_token':
+        return None
+    if request.method in ('GET', 'HEAD'):
+        # Only set if not already present (endpoint or after_request handles it)
+        if not request.cookies.get('csrf_token'):
+            token = secrets.token_hex(16)
+            request._csrf_token = token
+        return None
+    if request.method in ('POST', 'PUT', 'DELETE'):
+        cookie_token = request.cookies.get('csrf_token')
+        header_token = request.headers.get('X-CSRF-Token')
+        if not cookie_token or cookie_token != header_token:
+            return jsonify({'error': 'CSRF token missing or invalid'}), 403
+    return None
+
+@app.after_request
+def csrf_cookie(response):
+    if request.method in ('GET', 'HEAD') and hasattr(request, '_csrf_token'):
+        response.set_cookie('csrf_token', request._csrf_token, httponly=True, samesite='Strict')
+    return response
+
+@app.route('/api/csrf-token', methods=['GET'])
+def csrf_token():
+    token = secrets.token_hex(16)
+    resp = jsonify({'csrf_token': token})
+    resp.set_cookie('csrf_token', token, httponly=True, samesite='Strict')
+    return resp
 
 # ── health ───────────────────────────────────────────────────────────────────
 @app.route('/health', methods=['GET'])
