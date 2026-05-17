@@ -16,6 +16,15 @@ MIGRATIONS = [
      'ALTER TABLE fundraising ADD COLUMN description TEXT'),
     ('005', 'fundraising: add budget column',
      'ALTER TABLE fundraising ADD COLUMN budget TEXT DEFAULT "{}"'),
+    ('006', 'users: create table',
+     '''CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT DEFAULT "user",
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
 ]
 
 
@@ -51,7 +60,8 @@ def _run_migrations(conn):
     ''')
     conn.commit()
 
-    applied = {r['version'] for r in conn.execute(
+    applied = {r['version'
+] for r in conn.execute(
         'SELECT version FROM schema_migrations'
     ).fetchall()}
 
@@ -82,24 +92,28 @@ def _migrate_pipeline_to_fundraising(conn):
     pipeline = conn.execute('SELECT * FROM fund_pipeline').fetchall()
     if not pipeline:
         return
-    existing_names = {r['name'] for r in conn.execute(
+    existing_names = {r['name'
+] for r in conn.execute(
         "SELECT name FROM fundraising WHERE status='research'"
     ).fetchall()}
-    to_migrate = [r for r in pipeline if r['fund_name'] not in existing_names]
+    to_migrate = [r for r in pipeline if r['fund_name'
+] not in existing_names]
     if not to_migrate:
         return
     for row in to_migrate:
         conn.execute(
             '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
                VALUES (?, ?, ?, 0, 'research', ?, '{}', ?)''',
-            (row['fund_name'], row['description'], row['amount_estimate'] or 0, row['deadline'], row['notes'])
+            (row['fund_name'
+], row['description'], row['amount_estimate'] or 0, row['deadline'], row['notes'])
         )
     conn.commit()
     logging.info('Migrated %d fund_pipeline entries to fundraising', len(to_migrate))
 
 
 def _seed_events(conn):
-    count = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+    count = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0
+]
     if count > 0:
         return
     seed_events = [
@@ -112,7 +126,8 @@ def _seed_events(conn):
         ("Medlemsfornyelse", "2026-08-01", "2026-09-30", "membership", "Annual membership renewal period", "yearly", 1),
         ("DIF ansøgningsfrist", "2026-03-01", None, "grant_deadline", "DIF development fund deadline", "yearly", 1),
         ("DGI ansøgningsfrist", "2026-04-15", None, "grant_deadline", "DGI local activity fund deadline", "yearly", 1),
-    ]
+    
+]
     for e in seed_events:
         conn.execute(
             '''INSERT INTO events (title, event_date, end_date, category, description, recurring, needs_comms)

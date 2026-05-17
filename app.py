@@ -3,13 +3,17 @@ import json
 import logging
 import time
 from functools import wraps
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session, redirect
 import db as db_module
 import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
+
 app = Flask(__name__, static_folder='static', template_folder='templates')
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+
 
 _db_initialized = False
 
@@ -19,29 +23,64 @@ def _ensure_db():
         db_module.init_db()
         _db_initialized = True
 
-# ── simple password gate ───────────────────────────────────────────────────
-BASIC_AUTH_PASSWORD = os.environ.get('BASIC_AUTH_PASSWORD', '').strip()
 
-def _check_auth():
-    if not BASIC_AUTH_PASSWORD:
-        return True
-    auth = request.headers.get('Authorization', '')
-    if auth.startswith('Basic '):
-        import base64
-        try:
-            creds = base64.b64decode(auth[6:]).decode('utf-8')
-            _, password = creds.split(':', 1)
-            return password == BASIC_AUTH_PASSWORD
-        except Exception:
-            pass
-    return False
-
+# ── Authentication ───────────────────────────────────────────────────────────
 @app.before_request
 def _require_auth():
-    if request.endpoint in ('health', 'static', None):
+    if request.endpoint in ('health', 'static', 'login', 'api_login', 'csrf_token', None):
         return None
-    if not _check_auth():
+    
+    # If the user is trying to access the index page without auth, redirect to login
+    if request.endpoint == 'index' and not session.get('user_id'):
+        return redirect('/login')
+
+    # For API endpoints, return 401
+    if request.path.startswith('/api/') and not session.get('user_id'):
         return jsonify({'error': 'Unauthorized'}), 401
+
+@app.route('/login', methods=['GET'])
+def login():
+    if session.get('user_id'):
+        return redirect('/')
+    return send_from_directory('templates', 'login.html')
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.json or {}
+    email = data.get('email', '').strip()
+    password = data.get('password', '')
+    
+    if not email or not password:
+        return jsonify({'error': 'Email and password required'}), 400
+        
+    conn = db_module.get_db()
+    user = conn.execute('SELECT * FROM users WHERE email=?', (email,)).fetchone()
+    conn.close()
+    
+    if user and check_password_hash(user['password_hash'], password):
+        session.clear()
+        session['user_id'] = user['id']
+        session['user_name'] = user['name']
+        session['user_role'] = user['role']
+        # Session cookie is automatically secure/httponly in Flask
+        return jsonify({'message': 'Logged in', 'user': {'id': user['id'], 'name': user['name'], 'role': user['role']}})
+        
+    return jsonify({'error': 'Invalid credentials'}), 401
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    session.clear()
+    return jsonify({'message': 'Logged out'})
+
+@app.route('/api/auth/me', methods=['GET'])
+def api_me():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Not logged in'}), 401
+    return jsonify({
+        'id': session['user_id'],
+        'name': session['user_name'],
+        'role': session['user_role']
+    })
 
 @app.before_request
 def _init_on_first_request():

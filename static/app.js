@@ -1117,6 +1117,10 @@ async function apiFetch(url, method='GET', body=null) {
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
+  if (res.status === 401) {
+    window.location.href = '/login';
+    return;
+  }
   if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.error||res.statusText); }
   if (method==='DELETE') return res.json().catch(()=>({}));
   return res.json();
@@ -1162,6 +1166,23 @@ async function initCsrf() {
   }
 }
 
+// ── Auth & Init ─────────────────────────────────────────────────────────────
+let currentUser = null;
+async function loadUser() {
+  try {
+    currentUser = await apiFetch('/api/auth/me');
+    document.getElementById('user-name').textContent = currentUser.name;
+    document.getElementById('user-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
+  } catch(e) {
+    console.error('Failed to load user', e);
+  }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method:'POST', headers:{'X-CSRF-Token': csrfToken} });
+  window.location.href = '/login';
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.getElementById('sidebar-date').textContent = new Date().toLocaleDateString('da-DK',{day:'numeric',month:'long',year:'numeric'});
-initCsrf().then(() => loadAll());
+initCsrf().then(() => loadUser()).then(() => loadAll());
