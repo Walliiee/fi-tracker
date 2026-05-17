@@ -14,8 +14,10 @@ const BUDGET_CATS = [
   { id:'andet',        label:'Andet',          color:'#8b90a0' },
 ];
 
-const CAT_COLORS = { grant_deadline:'#e05555', activity:'#4ec994', board:'#9b7ee0', season:'#f0a030', membership:'#5b9fe0', reporting:'#60c0c0', facility:'#c08040' };
-const CAT_LABELS = { grant_deadline:'Tilskudsfrist', activity:'Aktivitet', board:'Bestyrelse', season:'Sæson', membership:'Medlemskab', reporting:'Rapportering', facility:'Faciliteter' };
+
+const CAT_COLORS = { grant_deadline:'#e05555', activity:'#4ec994', board:'#9b7ee0', season:'#f0a030', membership:'#5b9fe0', reporting:'#60c0c0', facility:'#c08040', class:'#5b9fe0' };
+const CAT_LABELS = { grant_deadline:'Tilskudsfrist', activity:'Aktivitet', board:'Bestyrelse', season:'Sæson', membership:'Medlemskab', reporting:'Rapportering', facility:'Faciliteter', class:'Hold/Klasse' };
+
 const GRANT_STATUS_COLORS = { research:'#555b70', identified:'#8b90a0', applied:'#5b9fe0', received:'#4ec994', rejected:'#e05555' };
 const GRANT_STATUS_DA     = { research:'Undersøges', identified:'Identificeret', applied:'Ansøgt', received:'Modtaget', rejected:'Afvist' };
 const STATUS_COLORS = { todo:'#8b90a0', started:'#f0a030', done:'#4ec994', new:'#8b90a0', discussed:'#f0a030', approved:'#4ec994', archived:'#555b70', draft:'#8b90a0', scheduled:'#5b9fe0', posted:'#4ec994' };
@@ -35,6 +37,14 @@ const KANBAN_COLS = [
 const state = { grants:[], tasks:[], ideas:[], events:[], posts:[] };
 let activePanel = 'dashboard';
 let grantsSubTab = 'kanban';
+
+const TASKS_KANBAN_COLS = [
+  { id:'todo',    label:'To Do',   color:'#8b90a0' },
+  { id:'started', label:'I gang',  color:'#f0a030' },
+  { id:'done',    label:'Færdig',  color:'#4ec994' }
+];
+let tasksSubTab = 'kanban';
+
 let commsSubTab = 'calendar';
 let commsCalM = new Date().getMonth();
 let commsCalY = new Date().getFullYear();
@@ -495,7 +505,101 @@ async function saveGrant() {
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
+
+function switchTasksTab(tab) {
+  tasksSubTab = tab;
+  document.querySelectorAll('#tasks-sub-tabs .sub-tab').forEach((el,i)=>{
+    el.classList.toggle('active', (i===0&&tab==='kanban')||(i===1&&tab==='liste'));
+  });
+  document.getElementById('tasks-kanban').style.display = tab==='kanban'?'flex':'none';
+  document.getElementById('tasks-table-wrap').style.display  = tab==='liste'?'block':'none';
+  document.getElementById('tasks-filter-row').style.display  = tab==='liste'?'flex':'none';
+  renderTasks();
+}
+
 function renderTasks() {
+  const { tasks } = state;
+  const overdueCount = tasks.filter(t=>t.due_date&&t.due_date<TODAY&&t.status!=='done').length;
+  const openCount = tasks.filter(t=>t.status!=='done').length;
+  const statsEl = document.getElementById('tasks-stats');
+  if(statsEl) statsEl.innerHTML = `${overdueCount>0?`<span style="color:var(--red)">${overdueCount} overskredet</span>, `:''}${openCount} åbne opgaver`;
+
+  if (tasksSubTab === 'kanban') {
+    renderTasksKanban(tasks);
+  } else {
+    renderTasksTable();
+  }
+}
+
+function renderTasksKanban(tasks) {
+  const board = document.getElementById('tasks-kanban');
+  if(!board) return;
+  board.innerHTML = TASKS_KANBAN_COLS.map(col=>{
+    const cards = tasks.filter(t=>t.status===col.id);
+    return `
+      <div class="kanban-col" id="tcol-${col.id}"
+        ondragover="event.preventDefault();document.getElementById('tcol-${col.id}').classList.add('drag-over')"
+        ondragleave="document.getElementById('tcol-${col.id}').classList.remove('drag-over')"
+        ondrop="dropTask(event,'${col.id}')"
+        style="border-color:var(--border)">
+        <div class="kanban-col-head">
+          <div class="kanban-col-title">
+            <span class="kanban-col-dot" style="background:${col.color}"></span>
+            <span class="kanban-col-label">${col.label}</span>
+            <span class="kanban-col-count">${cards.length}</span>
+          </div>
+          ${iconBtn(`openTaskModal(null,'${col.id}')`, 'Tilføj opgave', ICON.plus, false, 24)}
+        </div>
+        <div class="kanban-cards">
+          ${cards.map(t=>renderTaskCard(t)).join('')}
+          ${cards.length===0?'<div class="kanban-empty">Tom</div>':''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderTaskCard(t) {
+  const overdue = t.due_date && t.due_date < TODAY;
+  const soon    = !overdue && isSoon(t.due_date, 7);
+  return `
+    <div class="kanban-card" id="tcard-${t.id}" draggable="true"
+      ondragstart="dragTask(event,${t.id})"
+      ondragend="document.querySelectorAll('.kanban-card').forEach(c=>c.classList.remove('dragging'))"
+      onclick="openTaskModal(${t.id})">
+      <div style="display:flex;align-items:flex-start;gap:6px;">
+        <div style="padding-top:2px">${priDot(t.priority)}</div>
+        <div class="kanban-card-name" style="text-decoration:${t.status==='done'?'line-through':'none'};color:${t.status==='done'?'var(--text3)':'var(--text1)'}">${esc(t.title)}</div>
+      </div>
+      ${t.due_date?`<div class="kanban-card-deadline${overdue?' overdue':soon?' soon':''}">${overdue?ICON.warn:''}Frist: ${fmtDate(t.due_date)}</div>`:''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <span style="font-size:11px;color:var(--text3);font-weight:600">${esc(t.assignee||'Ufordelt')}</span>
+        <div class="kanban-card-actions" onclick="event.stopPropagation()">
+          ${iconBtn(`openTaskModal(${t.id})`, 'Rediger', ICON.edit, false, 24)}
+          ${iconBtn(`deleteTask(${t.id})`, 'Slet', ICON.trash, true, 24)}
+        </div>
+      </div>
+    </div>`;
+}
+
+function dragTask(e, id) {
+  e.dataTransfer.setData('text/task-id', id);
+  dragId = id;
+  document.getElementById('tcard-'+id).classList.add('dragging');
+}
+
+function dropTask(e, status) {
+  e.preventDefault();
+  const idStr = e.dataTransfer.getData('text/task-id');
+  if (!idStr) return; // ignore if it's not a task
+  const id = Number(idStr);
+  document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
+  const task = state.tasks.find(t=>t.id===id);
+  if (!task || task.status === status) return;
+  apiFetch(`/api/tasks/${id}`, 'PUT', { ...task, status })
+    .then(updated => { Object.assign(task, updated); renderTasks(); renderDashboard(); updateBadges(); });
+}
+
+function renderTasksTable() {
   const fA = document.getElementById('task-filter-assignee')?.value || '';
   const fS = document.getElementById('task-filter-status')?.value || '';
   const { tasks } = state;
@@ -540,7 +644,7 @@ function renderTasks() {
           <td style="font-size:13px;color:var(--text2);white-space:nowrap">${esc(r.assignee||'—')}</td>
           <td>${badge(r.status, TASK_STATUS_DA[r.status]||r.status)}</td>
           <td><div style="display:flex;align-items:center;gap:6px">${priDot(r.priority)}<span style="font-size:12px;color:var(--text3)">${PRI_DA[r.priority]||r.priority}</span></div></td>
-          <td style="font-size:13px;white-space:nowrap;color:${overdue?'var(--red)':isSoon(r.due_date)?'var(--accent)':'var(--text2)'};font-weight:${overdue?600:400}">
+          <td style="font-size:13px;white-space:nowrap;color:${overdue?'var(--red)':isSoon(r.due_date,7)?'var(--accent)':'var(--text2)'};font-weight:${overdue?600:400}">
             ${r.due_date?fmtDate(r.due_date):'—'}${overdue?` <span style="color:var(--red)">${ICON.warn}</span>`:''}
           </td>
           <td>
@@ -555,7 +659,6 @@ function renderTasks() {
     </tbody>
   </table>`;
 }
-
 async function toggleTask(id) {
   const t = state.tasks.find(t=>t.id===id);
   if (!t) return;
@@ -762,99 +865,113 @@ async function saveIdea() {
 }
 
 // ── Årshjul ───────────────────────────────────────────────────────────────────
+let eventsSubTab = 'events';
+
+function switchEventsTab(tab) {
+  eventsSubTab = tab;
+  document.querySelectorAll('#events-sub-tabs .sub-tab').forEach((el,i)=>{
+    el.classList.toggle('active', (i===0&&tab==='events')||(i===1&&tab==='classes'));
+  });
+  document.getElementById('events-view').style.display = tab==='events'?'block':'none';
+  document.getElementById('classes-view').style.display  = tab==='classes'?'block':'none';
+  // Hide next-30-banner and legends on classes view
+  document.getElementById('next-30-banner').style.display = tab==='events' && state.events.filter(e=>e.category!=='class'&&e.event_date>=TODAY&&isSoon(e.event_date,30)).length > 0 ? 'block' : 'none';
+  document.getElementById('cat-legend').style.display = tab==='events' ? 'flex' : 'none';
+  
+  renderArhjul();
+}
+
 function renderArhjul() {
-  const { events } = state;
-  const future30 = new Date(Date.now()+30*86400000).toISOString().slice(0,10);
-  const upcoming = events.filter(e=>e.event_date>=TODAY&&e.event_date<=future30).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  if (eventsSubTab === 'classes') {
+    renderClassesTable();
+  } else {
+    renderEventsGrid();
+  }
+}
 
-  const banner = document.getElementById('next-30-banner');
-  const chips  = document.getElementById('next-30-chips');
-  if (upcoming.length>0 && banner && chips) {
-    banner.style.display = '';
-    chips.innerHTML = upcoming.map(e=>{
-      const col = CAT_COLORS[e.category]||'#8b90a0';
-      return `<div class="next-30-chip" style="background:${col}18;border:1px solid ${col}30" onclick="showEventDetail(${e.id})">
-        <span style="width:6px;height:6px;border-radius:50%;background:${col};display:inline-block"></span>
-        <span style="font-weight:600">${fmtShort(e.event_date)}</span>
-        <span style="color:var(--text2)">${esc(e.title)}</span>
-        ${e.needs_comms?`<span style="color:var(--blue)">${ICON.announce}</span>`:''}
-      </div>`;
-    }).join('');
-  } else if (banner) banner.style.display = 'none';
+function renderClassesTable() {
+  const classes = state.events.filter(e => e.category === 'class').sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  const wrap = document.getElementById('classes-table-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = `<table>
+    <thead><tr>${['Holdnavn','Sæson','Første gang','Sidste gang','Beskrivelse',''].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${classes.map(r=>{
+        const recurringStr = r.recurring==='weekly'?'Hver uge':(r.recurring||'Enkelt gang');
+        return `<tr onclick="openEventModal(${r.id})">
+          <td><div style="font-size:13px;font-weight:600">${esc(r.title)}</div></td>
+          <td style="font-size:12px;color:var(--text2)">${recurringStr}</td>
+          <td style="font-size:12px">${fmtDate(r.event_date)}</td>
+          <td style="font-size:12px">${r.end_date?fmtDate(r.end_date):'—'}</td>
+          <td style="font-size:12px;color:var(--text3)">${esc(r.description||'—')}</td>
+          <td>
+            <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+              ${iconBtn(`openEventModal(${r.id})`, 'Rediger', ICON.edit, false, 26)}
+              ${iconBtn(`deleteEvent(${r.id})`, 'Slet', ICON.trash, true, 26)}
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      ${classes.length===0?`<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Ingen hold oprettet endnu</td></tr>`:''}
+    </tbody>
+  </table>`;
+}
 
-  const legend = document.getElementById('cat-legend');
-  if (legend) legend.innerHTML = Object.entries(CAT_LABELS).map(([k,v])=>`<div class="cat-legend-item"><span style="width:8px;height:8px;border-radius:50%;background:${CAT_COLORS[k]};display:inline-block"></span>${v}</div>`).join('');
+function renderEventsGrid() {
+  const events = state.events.filter(e => e.category !== 'class');
+  
+  const leg = document.getElementById('cat-legend');
+  leg.innerHTML = Object.entries(CAT_LABELS)
+    .filter(([k]) => k !== 'class')
+    .map(([k,v])=>`<div class="cat-legend-item"><span style="background:${CAT_COLORS[k]}"></span>${v}</div>`).join('');
+
+  const next30 = events.filter(e=>e.event_date>=TODAY && isSoon(e.event_date,30)).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+  const nb = document.getElementById('next-30-banner');
+  const nc = document.getElementById('next-30-chips');
+  if (next30.length > 0 && eventsSubTab === 'events') {
+    nb.style.display = 'block';
+    nc.innerHTML = next30.map(e=>`<div class="next-30-chip" onclick="openEventModal(${e.id})" style="border-color:${CAT_COLORS[e.category]||'#ccc'}"><span class="next-30-dot" style="background:${CAT_COLORS[e.category]||'#ccc'}"></span>${fmtShort(e.event_date)}: <span style="font-weight:600;color:var(--text1);margin-left:4px">${esc(e.title)}</span></div>`).join('');
+  } else {
+    nb.style.display = 'none';
+  }
+
+  const byMonth = {};
+  for(let i=0;i<12;i++) {
+    const d = new Date(); d.setMonth(d.getMonth()+i, 1);
+    const yk = d.getFullYear(); const mk = d.getMonth();
+    byMonth[`${yk}-${mk}`] = { y:yk, m:mk, evs:[] };
+  }
+  
+  events.forEach(e=>{
+    const d = new Date(e.event_date);
+    const k = `${d.getFullYear()}-${d.getMonth()}`;
+    if (byMonth[k]) byMonth[k].evs.push(e);
+  });
 
   const grid = document.getElementById('arhjul-grid');
-  if (!grid) return;
-  const currentMonth = new Date().getMonth();
-  grid.innerHTML = MONTHS.map((month, mi)=>{
-    const evts = events.filter(e=>{
-      if (!e.event_date) return false;
-      const d = new Date(e.event_date+'T00:00:00');
-      if (d.getMonth()===mi) return true;
-      if (e.end_date) {
-        const ed = new Date(e.end_date+'T00:00:00');
-        return d.getMonth()<=mi && ed.getMonth()>=mi;
-      }
-      return false;
-    }).sort((a,b)=>a.event_date.localeCompare(b.event_date));
-    const isCurrent = currentMonth===mi;
-    return `<div class="month-col${isCurrent?' current':''}">
-      <div class="month-col-head">
-        <span class="month-label">${MONTHS_SHORT[mi]}</span>
-        ${evts.length>0?`<span class="month-count">${evts.length}</span>`:''}
-      </div>
-      <div class="month-events">
-        ${evts.map(e=>{
-          const col = CAT_COLORS[e.category]||'#8b90a0';
-          const d = new Date(e.event_date+'T00:00:00');
-          return `<div class="event-chip" style="border-left-color:${col}" onclick="showEventDetail(${e.id})">
-            <span class="event-chip-day">${d.getDate()}.</span>
-            <span class="event-chip-title">${esc(e.title)}</span>
-            ${e.needs_comms?`<span style="color:var(--blue)">${ICON.announce}</span>`:''}
-            ${e.recurring?`<span style="color:var(--text3)">${ICON.repeat}</span>`:''}
-          </div>`;
-        }).join('')}
-        ${evts.length===0?`<div class="month-empty">—</div>`:''}
+  grid.innerHTML = Object.values(byMonth).map(m=>{
+    const monthEvs = m.evs.sort((a,b)=>a.event_date.localeCompare(b.event_date));
+    return `<div class="arhjul-month">
+      <div class="arhjul-month-title">${MONTHS[m.m]} ${m.y}</div>
+      <div class="arhjul-month-evs">
+        ${monthEvs.map(e=>`<div class="arhjul-ev" onclick="openEventModal(${e.id})" style="border-left-color:${CAT_COLORS[e.category]||'#ccc'}">
+          <div class="arhjul-ev-date">${fmtShort(e.event_date)} ${e.end_date?'– '+fmtShort(e.end_date):''}</div>
+          <div class="arhjul-ev-title">${esc(e.title)}</div>
+          ${e.needs_comms?`<div class="arhjul-ev-comms" title="Kræver kommunikation">${ICON.announce}</div>`:''}
+        </div>`).join('')}
+        ${monthEvs.length===0?'<div class="arhjul-empty">Ingen events</div>':''}
       </div>
     </div>`;
   }).join('');
 }
 
-function showEventDetail(id) {
-  const e = state.events.find(ev=>ev.id===id);
-  if (!e) return;
-  document.getElementById('modal-box').classList.remove('wide');
-  showModal(e.title, `
-    <div style="display:flex;flex-direction:column;gap:10px">
-      ${[
-        ['Dato', fmtDate(e.event_date)],
-        e.end_date ? ['Slutdato', fmtDate(e.end_date)] : null,
-        ['Kategori', CAT_LABELS[e.category]||e.category||'—'],
-        e.description ? ['Beskrivelse', e.description] : null,
-        ['Tilbagevendende', e.recurring||'Nej'],
-        ['Kommunikation', e.needs_comms?'Ja':'Nej'],
-      ].filter(Boolean).map(([k,v])=>`
-        <div style="display:flex;gap:12px;font-size:13px">
-          <span style="color:var(--text3);min-width:110px;flex-shrink:0">${k}</span>
-          <span>${esc(String(v))}</span>
-        </div>`).join('')}
-    </div>
-    <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
-      <button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Slet</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal();openEventModal(${e.id})">Rediger</button>
-    </div>`);
-}
-
 async function deleteEvent(id) {
-  if (!confirm('Slet event?')) return;
+  if (!confirm('Slet event/hold?')) return;
   await apiFetch(`/api/events/${id}`, 'DELETE');
   state.events = state.events.filter(e=>e.id!==id);
-  closeModal(); renderArhjul(); renderDashboard();
-  toast('Event slettet');
+  renderArhjul(); renderDashboard(); updateBadges();
+  toast('Slettet');
 }
-
 let eventForm = {};
 function openEventModal(id) {
   const r = id ? state.events.find(e=>e.id===id) : null;

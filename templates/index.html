@@ -121,7 +121,12 @@
             Ny opgave
           </button>
         </div>
-        <div class="filter-row">
+        <div class="sub-tabs" id="tasks-sub-tabs">
+          <div class="sub-tab active" onclick="switchTasksTab('kanban')">Tavle (Kanban)</div>
+          <div class="sub-tab" onclick="switchTasksTab('liste')">Liste</div>
+          <div class="sub-tabs-right" id="tasks-stats" style="color:var(--text3);font-size:12px;font-weight:500;"></div>
+        </div>
+        <div class="filter-row" id="tasks-filter-row" style="display:none;margin-bottom:15px;">
           <select class="filter-select" id="task-filter-assignee" onchange="renderTasks()">
             <option value="">Alle ansvarlige</option>
           </select>
@@ -133,7 +138,8 @@
           </select>
           <div class="filter-row" style="flex:1;justify-content:flex-end;margin:0;padding:0;" id="task-filter-info"></div>
         </div>
-        <div class="table-wrap" id="tasks-table-wrap"></div>
+        <div id="tasks-kanban" style="display:flex;gap:12px;flex:1;overflow:hidden;"></div>
+        <div class="table-wrap" id="tasks-table-wrap" style="display:none;"></div>
       </div>
     </div>
 
@@ -170,21 +176,30 @@
       <div class="panel-inner">
         <div class="page-header">
           <div>
-            <h1>Årshjul</h1>
-            <div class="subtitle">Kalender for hele foreningsåret</div>
+            <h1>Årshjul & Hold</h1>
+            <div class="subtitle">Kalender for events, hold og foreningsåret</div>
           </div>
           <button class="btn" onclick="openEventModal(null)">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/></svg>
-            Tilføj event
+            Tilføj event/hold
           </button>
+        </div>
+        <div class="sub-tabs" id="events-sub-tabs">
+          <div class="sub-tab active" onclick="switchEventsTab('events')">Events</div>
+          <div class="sub-tab" onclick="switchEventsTab('classes')">Hold (Klasser)</div>
         </div>
         <div class="next-30-banner" id="next-30-banner" style="display:none;">
           <h4>Næste 30 dage</h4>
           <div class="next-30-chips" id="next-30-chips"></div>
         </div>
         <div class="cat-legend" id="cat-legend"></div>
-        <div style="flex:1;overflow-y:auto;">
+        
+        <div id="events-view" style="flex:1;overflow-y:auto;display:block;">
           <div class="arhjul-grid" id="arhjul-grid"></div>
+        </div>
+        
+        <div id="classes-view" style="flex:1;overflow-y:auto;display:none;">
+          <div class="table-wrap" id="classes-table-wrap"></div>
         </div>
       </div>
     </div>
