@@ -86,9 +86,11 @@ def csrf_cookie(response):
 
 @app.route('/api/csrf-token', methods=['GET'])
 def csrf_token():
-    token = secrets.token_hex(16)
+    token = request.cookies.get('csrf_token')
+    if not token:
+        token = secrets.token_hex(16)
+        request._csrf_token = token
     resp = jsonify({'csrf_token': token})
-    resp.set_cookie('csrf_token', token, httponly=True, samesite='Strict')
     return resp
 
 # ── health ───────────────────────────────────────────────────────────────────
@@ -160,6 +162,10 @@ def create_fundraising():
 def handle_fundraising(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM fundraising WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM fundraising WHERE id=?', (id,))
         conn.commit()
         conn.close()
@@ -215,17 +221,26 @@ def create_fund_pipeline():
 def handle_fund_pipeline(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM fund_pipeline WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM fund_pipeline WHERE id=?', (id,))
         conn.commit()
         conn.close()
         app.logger.info('fund_pipeline deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
+    existing = conn.execute('SELECT * FROM fund_pipeline WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    merged = {**dict(existing), **data}
     conn.execute(
         '''UPDATE fund_pipeline SET fund_name=?, description=?, amount_estimate=?, deadline=?, status=?, notes=?
            WHERE id=?''',
-        (data.get('fund_name'), data.get('description'), data.get('amount_estimate'),
-         data.get('deadline'), data.get('status'), data.get('notes'), id)
+        (merged.get('fund_name'), merged.get('description'), merged.get('amount_estimate'),
+         merged.get('deadline'), merged.get('status'), merged.get('notes'), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM fund_pipeline WHERE id=?', (id,)).fetchone()
@@ -263,17 +278,26 @@ def create_task():
 def handle_task(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM tasks WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM tasks WHERE id=?', (id,))
         conn.commit()
         conn.close()
         app.logger.info('task deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
+    existing = conn.execute('SELECT * FROM tasks WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    merged = {**dict(existing), **data}
     conn.execute(
         '''UPDATE tasks SET title=?, assignee=?, status=?, priority=?, due_date=?, notes=?, updated_at=CURRENT_TIMESTAMP
            WHERE id=?''',
-        (data.get('title'), data.get('assignee'), data.get('status'), data.get('priority'),
-         data.get('due_date'), data.get('notes'), id)
+        (merged.get('title'), merged.get('assignee'), merged.get('status'), merged.get('priority'),
+         merged.get('due_date'), merged.get('notes'), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM tasks WHERE id=?', (id,)).fetchone()
@@ -311,16 +335,25 @@ def create_idea():
 def handle_idea(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM ideas WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM ideas WHERE id=?', (id,))
         conn.commit()
         conn.close()
         app.logger.info('idea deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
+    existing = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    merged = {**dict(existing), **data}
     conn.execute(
         '''UPDATE ideas SET title=?, description=?, category=?, status=?, vote_score=?, tags=? WHERE id=?''',
-        (data.get('title'), data.get('description'), data.get('category'), data.get('status'),
-         data.get('vote_score', 0), data.get('tags', ''), id)
+        (merged.get('title'), merged.get('description'), merged.get('category'), merged.get('status'),
+         merged.get('vote_score', 0), merged.get('tags', ''), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM ideas WHERE id=?', (id,)).fetchone()
@@ -390,18 +423,27 @@ def create_event():
 def handle_event(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM events WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM events WHERE id=?', (id,))
         conn.commit()
         conn.close()
         app.logger.info('event deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
+    existing = conn.execute('SELECT * FROM events WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    merged = {**dict(existing), **data}
     conn.execute(
         '''UPDATE events SET title=?, event_date=?, end_date=?, category=?, description=?, recurring=?, needs_comms=?
            WHERE id=?''',
-        (data.get('title'), data.get('event_date'), data.get('end_date'),
-         data.get('category'), data.get('description'), data.get('recurring'),
-         data.get('needs_comms', 0), id)
+        (merged.get('title'), merged.get('event_date'), merged.get('end_date'),
+         merged.get('category'), merged.get('description'), merged.get('recurring'),
+         merged.get('needs_comms', 0), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM events WHERE id=?', (id,)).fetchone()
@@ -440,18 +482,27 @@ def create_content_post():
 def handle_content_post(id):
     conn = db_module.get_db()
     if request.method == 'DELETE':
+        existing = conn.execute('SELECT id FROM content_posts WHERE id=?', (id,)).fetchone()
+        if not existing:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
         conn.execute('DELETE FROM content_posts WHERE id=?', (id,))
         conn.commit()
         conn.close()
         app.logger.info('content_post deleted id=%s', id)
         return jsonify({'deleted': id})
     data = request.json
+    existing = conn.execute('SELECT * FROM content_posts WHERE id=?', (id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'not found'}), 404
+    merged = {**dict(existing), **data}
     conn.execute(
         '''UPDATE content_posts SET title=?, platform=?, planned_date=?, status=?, event_id=?, posted_by=?, link=?, notes=?
            WHERE id=?''',
-        (data.get('title'), data.get('platform'), data.get('planned_date'),
-         data.get('status'), data.get('event_id'), data.get('posted_by'),
-         data.get('link'), data.get('notes'), id)
+        (merged.get('title'), merged.get('platform'), merged.get('planned_date'),
+         merged.get('status'), merged.get('event_id'), merged.get('posted_by'),
+         merged.get('link'), merged.get('notes'), id)
     )
     conn.commit()
     row = conn.execute('SELECT * FROM content_posts WHERE id=?', (id,)).fetchone()
@@ -560,10 +611,6 @@ def get_dashboard():
 def index():
     return send_from_directory('templates', 'index.html')
 
-if __name__ == '__main__':
-    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
-    port = int(os.environ.get('PORT', 5002))
-    app.run(host='0.0.0.0', port=port, debug=debug)
 
 # ── CSV export helpers ────────────────────────────────────────────────────────
 def _csv_response(rows, module):
@@ -771,3 +818,8 @@ Skriv et kort resume pa 3-5 punkter pa dansk. Vaer konkret, ikke generisk. Naevn
         fallback += f"- Events: {stats['events']['in_range']} i perioden, {stats['events']['total_needs_comms']} mangler comms\n"
         fallback += f"- Indhold: {stats['communications']['posts_in_range']} opslag i perioden\n"
         return jsonify({'report': fallback, 'stats': stats})
+
+if __name__ == '__main__':
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    port = int(os.environ.get('PORT', 5002))
+    app.run(host='0.0.0.0', port=port, debug=debug)

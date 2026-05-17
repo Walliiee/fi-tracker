@@ -1,0 +1,1167 @@
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TODAY = new Date().toISOString().slice(0,10);
+const MONTHS       = ['Januar','Februar','Marts','April','Maj','Juni','Juli','August','September','Oktober','November','December'];
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+
+const BUDGET_CATS = [
+  { id:'udstyr',       label:'Udstyr',        color:'#5b9fe0' },
+  { id:'pr',           label:'PR',             color:'#9b7ee0' },
+  { id:'marketing',    label:'Markedsføring',  color:'#e05555' },
+  { id:'toj',          label:'Tøj',            color:'#4ec994' },
+  { id:'rekruttering', label:'Rekruttering',   color:'#f0a030' },
+  { id:'faciliteter',  label:'Faciliteter',    color:'#60c0c0' },
+  { id:'andet',        label:'Andet',          color:'#8b90a0' },
+];
+
+const CAT_COLORS = { grant_deadline:'#e05555', activity:'#4ec994', board:'#9b7ee0', season:'#f0a030', membership:'#5b9fe0', reporting:'#60c0c0', facility:'#c08040' };
+const CAT_LABELS = { grant_deadline:'Tilskudsfrist', activity:'Aktivitet', board:'Bestyrelse', season:'Sæson', membership:'Medlemskab', reporting:'Rapportering', facility:'Faciliteter' };
+const GRANT_STATUS_COLORS = { research:'#555b70', identified:'#8b90a0', applied:'#5b9fe0', received:'#4ec994', rejected:'#e05555' };
+const GRANT_STATUS_DA     = { research:'Undersøges', identified:'Identificeret', applied:'Ansøgt', received:'Modtaget', rejected:'Afvist' };
+const STATUS_COLORS = { todo:'#8b90a0', started:'#f0a030', done:'#4ec994', new:'#8b90a0', discussed:'#f0a030', approved:'#4ec994', archived:'#555b70', draft:'#8b90a0', scheduled:'#5b9fe0', posted:'#4ec994' };
+const TASK_STATUS_DA = { todo:'Todo', started:'I gang', done:'Færdig' };
+const PRI_DA = { low:'Lav', medium:'Medium', high:'Høj' };
+const IDEA_STATUS_DA = { new:'Ny', discussed:'Diskuteret', approved:'Godkendt', archived:'Arkiveret' };
+const POST_STATUS_DA = { draft:'Kladde', scheduled:'Planlagt', posted:'Postet' };
+
+const KANBAN_COLS = [
+  { id:'identified', label:'Identificeret', color:'#8b90a0' },
+  { id:'applied',    label:'Ansøgt',        color:'#5b9fe0' },
+  { id:'received',   label:'Modtaget',      color:'#4ec994' },
+  { id:'rejected',   label:'Afvist',        color:'#e05555' },
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const state = { grants:[], tasks:[], ideas:[], events:[], posts:[] };
+let activePanel = 'dashboard';
+let grantsSubTab = 'kanban';
+let commsSubTab = 'calendar';
+let commsCalM = new Date().getMonth();
+let commsCalY = new Date().getFullYear();
+let ideaFilterTag = '';
+let dragId = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const fmtDate  = s => { if (!s) return ''; const d = new Date(s+'T00:00:00'); return `${d.getDate()}. ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; };
+const fmtShort = s => { if (!s) return ''; const d = new Date(s+'T00:00:00'); return `${d.getDate()}. ${MONTHS_SHORT[d.getMonth()]}`; };
+const isOverdue = s => !!s && s < TODAY;
+const isSoon    = (s, days=14) => { if (!s) return false; const diff=(new Date(s)-new Date())/86400000; return diff>=0&&diff<days; };
+const kr        = n => n ? Number(n).toLocaleString('da-DK')+' kr' : '—';
+const tagHue    = str => { let h=0; for (const c of str) h=(c.charCodeAt(0)+((h<<5)-h)); return Math.abs(h)%300+30; };
+const esc       = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const totalBudget = b => { if (!b) return 0; return Object.values(b).reduce((s,v)=>s+(Number(v)||0),0); };
+
+function badge(status, label, colors) {
+  const col = (colors||STATUS_COLORS)[status] || '#8b90a0';
+  return `<span class="badge" style="background:${col}20;color:${col};border:1px solid ${col}30">${esc(label||status)}</span>`;
+}
+
+function priDot(p) {
+  const col = p==='high'?'var(--red)':p==='medium'?'var(--accent)':'var(--green)';
+  return `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${col};flex-shrink:0" title="${p}"></span>`;
+}
+
+function iconBtn(onclick, title, svgInner, danger=false, size=28) {
+  return `<button class="icon-btn${danger?' danger':''}" style="width:${size}px;height:${size}px" onclick="${onclick}" title="${title}">${svgInner}</button>`;
+}
+
+const ICON = {
+  edit:  `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5H2.5V11L11 2.5z"/></svg>`,
+  trash: `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M5 4V2.5h6V4M5.5 4v8a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5V4"/></svg>`,
+  warn:  `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2L1 14h14L8 2z"/><path d="M8 7v3M8 11.5v.5"/></svg>`,
+  check: `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8l4 4 7-7"/></svg>`,
+  left:  `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>`,
+  right: `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>`,
+  plus:  `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/></svg>`,
+  announce: `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h2v4H2zM4 6l8-3v10L4 10V6z"/><path d="M6 10v2a1 1 0 0 0 2 0v-2"/></svg>`,
+  repeat: `<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4H5a3 3 0 0 0 0 6h6M10 2l2 2-2 2M4 12H11a3 3 0 0 0 0-6H5M6 10l-2 2 2 2"/></svg>`,
+};
+
+function budgetBar(budget) {
+  const total = totalBudget(budget);
+  if (!total || !budget) return '';
+  const cats = BUDGET_CATS.filter(c=>(budget[c.id]||0)>0);
+  const segs = cats.map(c=>`<div style="flex:${budget[c.id]/total};background:${c.color};min-width:2px" title="${c.label}: ${kr(budget[c.id])}"></div>`).join('');
+  const labels = cats.map(c=>`<span style="font-size:10px;color:var(--text3)"><span style="color:${c.color}">${c.label}</span> ${Number(budget[c.id]).toLocaleString('da-DK')}</span>`).join('');
+  return `<div class="budget-bar"><div class="budget-bar-track">${segs}</div><div class="budget-bar-labels" style="display:flex;flex-wrap:wrap;gap:2px 10px">${labels}</div></div>`;
+}
+
+// ── Data Loading ──────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    const [grants, tasks, ideas, events, posts] = await Promise.all([
+      fetch('/api/fundraising').then(r=>r.json()),
+      fetch('/api/tasks').then(r=>r.json()),
+      fetch('/api/ideas').then(r=>r.json()),
+      fetch('/api/events').then(r=>r.json()),
+      fetch('/api/content-posts').then(r=>r.json()),
+    ]);
+    state.grants = grants;
+    state.tasks = tasks;
+    state.ideas = ideas;
+    state.events = events;
+    state.posts = posts;
+    renderAll();
+    updateBadges();
+  } catch(e) {
+    console.error('loadAll failed', e);
+    toast('Fejl ved indlæsning af data');
+  }
+}
+
+function renderAll() {
+  renderDashboard();
+  renderGrants();
+  renderTasks();
+  renderIdeas();
+  renderArhjul();
+  renderComms();
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+const PANELS = ['dashboard','grants','tasks','ideas','arhjul','comms'];
+
+function switchPanel(id) {
+  activePanel = id;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const panel = document.getElementById('panel-'+id);
+  if (panel) panel.classList.add('active');
+  const navItem = document.querySelector(`.nav-item[data-panel="${id}"]`);
+  if (navItem) navItem.classList.add('active');
+  // Update nav icon colors
+  document.querySelectorAll('.nav-item .nav-icon').forEach(ic => ic.style.color = '');
+  if (navItem) navItem.querySelector('.nav-icon').style.color = 'var(--accent)';
+}
+
+function updateBadges() {
+  const activeGrants = state.grants.filter(g=>['identified','applied'].includes(g.status)).length;
+  const overdueTasks = state.tasks.filter(t=>t.due_date&&t.due_date<TODAY&&t.status!=='done').length;
+  const newIdeas     = state.ideas.filter(i=>i.status==='new').length;
+  const bG = document.getElementById('badge-grants');
+  const bT = document.getElementById('badge-tasks');
+  const bI = document.getElementById('badge-ideas');
+  if (bG) bG.textContent = activeGrants || '';
+  if (bT) bT.textContent = overdueTasks || '';
+  if (bI) bI.textContent = newIdeas || '';
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const { grants, tasks, ideas, events } = state;
+  const overdueTasks = tasks.filter(t=>t.due_date&&t.due_date<TODAY&&t.status!=='done');
+  const openTasks    = tasks.filter(t=>t.status!=='done');
+  const doneTasks    = tasks.filter(t=>t.status==='done');
+  const upcomingDeadlines = grants.filter(g=>g.deadline&&g.deadline>=TODAY&&!['received','rejected'].includes(g.status)).sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,5);
+  const upcomingEvents = events.filter(e=>e.event_date>=TODAY).sort((a,b)=>a.event_date.localeCompare(b.event_date)).slice(0,6);
+  const topIdeas = [...ideas].sort((a,b)=>(b.vote_score||0)-(a.vote_score||0)).slice(0,4);
+
+  const allBudget = {};
+  grants.forEach(g=>{ if(g.budget) Object.entries(g.budget).forEach(([k,v])=>{ allBudget[k]=(allBudget[k]||0)+(Number(v)||0); }); });
+  const allBudgetTotal = totalBudget(allBudget);
+
+  // Top row
+  const topHtml = `
+    <div class="dash-card">
+      <div class="dash-card-header">
+        Opgaver
+        ${overdueTasks.length>0?`<span style="font-size:11px;color:var(--red);background:var(--red-dim);padding:2px 8px;border-radius:10px;font-weight:600">${overdueTasks.length} overskredet</span>`:''}
+      </div>
+      <div style="padding:12px 16px;display:flex;gap:20px">
+        <div style="text-align:center"><div style="font-size:28px;font-weight:700;line-height:1">${openTasks.length}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Åbne</div></div>
+        <div style="text-align:center"><div style="font-size:28px;font-weight:700;line-height:1;color:${overdueTasks.length>0?'var(--red)':'var(--text3)'}">${overdueTasks.length}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Overskredet</div></div>
+        <div style="text-align:center"><div style="font-size:28px;font-weight:700;line-height:1;color:var(--green)">${doneTasks.length}</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Færdige</div></div>
+      </div>
+      ${overdueTasks.slice(0,3).map(t=>`
+        <div class="dash-row">
+          ${priDot(t.priority)}
+          <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.title)}</span>
+          <span style="font-size:11px;color:var(--text3);flex-shrink:0">${esc(t.assignee||'')}</span>
+        </div>`).join('')}
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-header">Tilskudsfrister</div>
+      ${upcomingDeadlines.length===0?`<div style="padding:16px;color:var(--text3);font-size:13px">Ingen kommende frister</div>`:''}
+      ${upcomingDeadlines.map(g=>{
+        const diff = Math.round((new Date(g.deadline)-new Date())/86400000);
+        const col = GRANT_STATUS_COLORS[g.status]||'#8b90a0';
+        return `<div class="dash-row">
+          <span style="width:6px;height:6px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block"></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g.name)}</div>
+            <div style="font-size:11px;color:var(--text3)">${fmtShort(g.deadline)}</div>
+          </div>
+          <span style="font-size:11px;font-weight:${diff<=14?700:400};color:${diff<=7?'var(--red)':diff<=30?'var(--accent)':'var(--text3)'};flex-shrink:0;font-variant-numeric:tabular-nums">${diff}d</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-header">Budgetfordeling <span style="font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums">${kr(allBudgetTotal)}</span></div>
+      <div style="padding:10px 16px">
+        ${allBudgetTotal>0?`
+          <div style="display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;margin-bottom:10px">
+            ${BUDGET_CATS.filter(c=>(allBudget[c.id]||0)>0).map(cat=>`<div style="flex:${allBudget[cat.id]/allBudgetTotal};background:${cat.color}" title="${cat.label}: ${kr(allBudget[cat.id])}"></div>`).join('')}
+          </div>
+          ${BUDGET_CATS.filter(c=>(allBudget[c.id]||0)>0).map(cat=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+              <span style="width:8px;height:8px;border-radius:50%;background:${cat.color};flex-shrink:0;display:inline-block"></span>
+              <span style="flex:1;font-size:12px;color:var(--text2)">${cat.label}</span>
+              <span style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums">${kr(allBudget[cat.id])}</span>
+              <span style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">${Math.round(allBudget[cat.id]/allBudgetTotal*100)}%</span>
+            </div>`).join('')}
+        `:`<div style="color:var(--text3);font-size:13px;padding:8px 0">Ingen budgetdata endnu</div>`}
+      </div>
+    </div>`;
+
+  // Bottom row
+  const botHtml = `
+    <div class="dash-card">
+      <div class="dash-card-header">Kommende begivenheder <span style="font-size:11px;color:var(--text3);font-weight:400">Næste 90 dage</span></div>
+      ${upcomingEvents.map(e=>{
+        const col = CAT_COLORS[e.category]||'#8b90a0';
+        const diff = Math.round((new Date(e.event_date)-new Date())/86400000);
+        return `<div class="dash-row">
+          <div style="width:3px;height:32px;border-radius:2px;background:${col};flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.title)}</div>
+            <div style="font-size:11px;color:var(--text3)">${fmtDate(e.event_date)}</div>
+          </div>
+          ${e.needs_comms?`<span style="color:var(--blue)">${ICON.announce}</span>`:''}
+          <span style="font-size:11px;font-variant-numeric:tabular-nums;color:${diff<=7?'var(--red)':diff<=30?'var(--accent)':'var(--text3)'};font-weight:${diff<=7?700:400};flex-shrink:0">${diff===0?'I dag':diff+'d'}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="dash-card">
+      <div class="dash-card-header">Top idéer</div>
+      ${topIdeas.map(idea=>`
+        <div class="dash-row">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);min-width:24px;font-weight:600">+${idea.vote_score||0}</span>
+          <span style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(idea.title)}</span>
+          ${badge(idea.status, IDEA_STATUS_DA[idea.status]||idea.status)}
+        </div>`).join('')}
+    </div>`;
+
+  document.getElementById('dash-top').innerHTML = topHtml;
+  document.getElementById('dash-bot').innerHTML = botHtml;
+}
+
+// ── Grants ────────────────────────────────────────────────────────────────────
+function switchGrantsTab(tab) {
+  grantsSubTab = tab;
+  document.querySelectorAll('#grants-sub-tabs .sub-tab').forEach((el,i)=>{
+    el.classList.toggle('active', (i===0&&tab==='kanban')||(i===1&&tab==='tabel'));
+  });
+  document.getElementById('grants-kanban').style.display = tab==='kanban'?'flex':'none';
+  document.getElementById('grants-table').style.display  = tab==='tabel'?'flex':'none';
+  renderGrants();
+}
+
+function renderGrants() {
+  const grants = state.grants;
+  const received = grants.filter(g=>g.status==='received').reduce((s,g)=>s+(g.amount_received||totalBudget(g.budget)||0),0);
+  const applied  = grants.filter(g=>g.status==='applied').length;
+  const research = grants.filter(g=>g.status==='research').length;
+  document.getElementById('grants-stats').innerHTML =
+    `<span style="color:var(--green)">${kr(received)} modtaget</span><span>${applied} ansøgt</span><span>${research} under research</span>`;
+
+  if (grantsSubTab==='kanban') renderGrantsKanban(grants);
+  else renderGrantsTable(grants);
+}
+
+function renderGrantsKanban(grants) {
+  const board = document.getElementById('grants-kanban');
+  const activeGrants = grants.filter(g=>g.status!=='research');
+  board.innerHTML = KANBAN_COLS.map(col=>{
+    const cards = activeGrants.filter(r=>r.status===col.id);
+    return `
+      <div class="kanban-col" id="kcol-${col.id}"
+        ondragover="event.preventDefault();document.getElementById('kcol-${col.id}').classList.add('drag-over')"
+        ondragleave="document.getElementById('kcol-${col.id}').classList.remove('drag-over')"
+        ondrop="dropGrant(event,'${col.id}')"
+        style="border-color:var(--border)">
+        <div class="kanban-col-head">
+          <div class="kanban-col-title">
+            <span class="kanban-col-dot" style="background:${col.color}"></span>
+            <span class="kanban-col-label">${col.label}</span>
+            <span class="kanban-col-count">${cards.length}</span>
+          </div>
+          ${iconBtn(`openGrantModal(null,'${col.id}')`, 'Tilføj', ICON.plus, false, 24)}
+        </div>
+        <div class="kanban-cards">
+          ${cards.map(r=>renderGrantCard(r)).join('')}
+          ${cards.length===0?'<div class="kanban-empty">Tom</div>':''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderGrantCard(r) {
+  const overdue = r.deadline && r.deadline < TODAY;
+  const soon    = !overdue && isSoon(r.deadline, 30);
+  const budgTotal = totalBudget(r.budget);
+  const displayAmt = r.status==='received'?(r.amount_received||budgTotal):r.amount_applied||budgTotal;
+  return `
+    <div class="kanban-card" id="kcard-${r.id}" draggable="true"
+      ondragstart="dragGrant(event,${r.id})"
+      ondragend="document.querySelectorAll('.kanban-card').forEach(c=>c.classList.remove('dragging'))"
+      onclick="openGrantModal(${r.id})">
+      <div class="kanban-card-name">${esc(r.name)}</div>
+      ${displayAmt>0?`<div class="kanban-card-amount">${kr(displayAmt)}</div>`:''}
+      ${budgetBar(r.budget)}
+      ${r.deadline?`<div class="kanban-card-deadline${overdue?' overdue':soon?' soon':''}">${overdue?ICON.warn:''}Frist: ${fmtDate(r.deadline)}</div>`:''}
+      ${r.notes?`<div class="kanban-card-notes">${esc(r.notes.slice(0,70))}${r.notes.length>70?'…':''}</div>`:''}
+      <div class="kanban-card-actions" onclick="event.stopPropagation()">
+        ${iconBtn(`openGrantModal(${r.id})`, 'Rediger', ICON.edit, false, 24)}
+        ${iconBtn(`deleteGrant(${r.id})`, 'Slet', ICON.trash, true, 24)}
+      </div>
+    </div>`;
+}
+
+function renderGrantsTable(grants) {
+  const wrap = document.getElementById('grants-table');
+  const sorted = [...grants].sort((a,b)=>{
+    const order = ['applied','identified','research','received','rejected'];
+    return (order.indexOf(a.status)||99)-(order.indexOf(b.status)||99);
+  });
+  wrap.innerHTML = `<div class="table-wrap">
+    <table>
+      <thead><tr>${['Tilskud','Status','Ansøgt','Modtaget','Frist','Budgetfordeling',''].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${sorted.map(r=>{
+          const overdue = isOverdue(r.deadline) && !['received','rejected'].includes(r.status);
+          const soon    = !overdue && isSoon(r.deadline,14);
+          const budgTotal = totalBudget(r.budget);
+          return `<tr onclick="openGrantModal(${r.id})" style="opacity:${r.status==='rejected'?'0.5':'1'}">
+            <td>
+              <div style="font-size:13px;font-weight:600">${esc(r.name)}</div>
+              ${r.description?`<div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(r.description)}</div>`:''}
+            </td>
+            <td>${badge(r.status, GRANT_STATUS_DA[r.status]||r.status, GRANT_STATUS_COLORS)}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--blue);font-variant-numeric:tabular-nums;white-space:nowrap">${r.amount_applied||budgTotal?kr(r.amount_applied||budgTotal):'—'}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap">${r.amount_received?kr(r.amount_received):'—'}</td>
+            <td style="font-size:12px;color:${overdue?'var(--red)':soon?'var(--accent)':'var(--text2)'};font-weight:${overdue||soon?600:400};white-space:nowrap">${r.deadline?fmtDate(r.deadline):'—'}</td>
+            <td style="min-width:140px">
+              ${budgTotal>0?`
+                <div style="display:flex;gap:1px;height:4px;border-radius:2px;overflow:hidden;margin-bottom:4px;min-width:100px">
+                  ${BUDGET_CATS.filter(c=>(r.budget[c.id]||0)>0).map(cat=>`<div style="flex:${r.budget[cat.id]/budgTotal};background:${cat.color}" title="${cat.label}: ${kr(r.budget[cat.id])}"></div>`).join('')}
+                </div>
+                <div style="font-size:10px;color:var(--text3)">${BUDGET_CATS.filter(c=>(r.budget[c.id]||0)>0).map(c=>c.label).join(', ')}</div>
+              `:'<span style="font-size:11px;color:var(--text3)">—</span>'}
+            </td>
+            <td onclick="event.stopPropagation()">
+              <div style="display:flex;gap:5px">
+                ${iconBtn(`openGrantModal(${r.id})`, 'Rediger', ICON.edit, false, 26)}
+                ${iconBtn(`deleteGrant(${r.id})`, 'Slet', ICON.trash, true, 26)}
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+        ${grants.length===0?`<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Ingen tilskud endnu</td></tr>`:''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function dragGrant(e, id) {
+  e.dataTransfer.setData('text/plain', id);
+  dragId = id;
+  document.getElementById('kcard-'+id).classList.add('dragging');
+}
+
+function dropGrant(e, status) {
+  e.preventDefault();
+  const id = Number(e.dataTransfer.getData('text/plain'));
+  document.querySelectorAll('.kanban-col').forEach(c=>c.classList.remove('drag-over'));
+  const grant = state.grants.find(g=>g.id===id);
+  if (!grant || grant.status === status) return;
+  apiFetch(`/api/fundraising/${id}`, 'PUT', { status })
+    .then(updated => { Object.assign(grant, updated); renderGrants(); updateBadges(); });
+}
+
+async function deleteGrant(id) {
+  if (!confirm('Slet tilskud?')) return;
+  await apiFetch(`/api/fundraising/${id}`, 'DELETE');
+  state.grants = state.grants.filter(g=>g.id!==id);
+  renderGrants(); renderDashboard(); updateBadges();
+  toast('Tilskud slettet');
+}
+
+// ── Grant Modal ───────────────────────────────────────────────────────────────
+let grantForm = {};
+
+function openGrantModal(id, prefillStatus) {
+  const r = id ? state.grants.find(g=>g.id===id) : null;
+  grantForm = r ? {...r, budget:{...(r.budget||{})}} : { name:'', description:'', amount_applied:'', amount_received:'', status:prefillStatus||'identified', deadline:'', budget:{}, notes:'' };
+  document.getElementById('modal-box').classList.add('wide');
+  showModal(r?'Rediger tilskud':'Nyt tilskud', buildGrantModalBody());
+}
+
+function buildGrantModalBody() {
+  const f = grantForm;
+  const total = totalBudget(f.budget);
+  const budgetRows = BUDGET_CATS.map(cat=>`
+    <div class="budget-editor-row">
+      <span class="budget-editor-dot" style="background:${cat.color}"></span>
+      <span class="budget-editor-name">${cat.label}</span>
+      <div class="budget-editor-input-wrap">
+        <input type="number" min="0" placeholder="0" class="budget-cat-input" data-cat="${cat.id}" value="${f.budget[cat.id]||''}" oninput="updateBudgetCat('${cat.id}',this.value)">
+        <span class="budget-editor-unit">kr</span>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="field"><label>Navn</label><input class="fi" id="gf-name" value="${esc(f.name||'')}" placeholder="f.eks. Nordea Fonden" autofocus></div>
+    <div class="field"><label>Beskrivelse</label><textarea class="fi" id="gf-desc" rows="2">${esc(f.description||'')}</textarea></div>
+    <div class="field-grid">
+      <div class="field"><label>Status</label><select class="fi" id="gf-status">
+        <option value="research" ${f.status==='research'?'selected':''}>Undersøges</option>
+        <option value="identified" ${f.status==='identified'?'selected':''}>Identificeret</option>
+        <option value="applied" ${f.status==='applied'?'selected':''}>Ansøgt</option>
+        <option value="received" ${f.status==='received'?'selected':''}>Modtaget</option>
+        <option value="rejected" ${f.status==='rejected'?'selected':''}>Afvist</option>
+      </select></div>
+      <div class="field"><label>Frist</label><input class="fi" type="date" id="gf-deadline" value="${f.deadline||''}"></div>
+    </div>
+    <div class="field-grid">
+      <div class="field"><label>Ansøgt beløb (kr)</label><input class="fi" type="number" id="gf-applied" value="${f.amount_applied||''}" placeholder="${total||'0'}"></div>
+      <div class="field"><label>Modtaget beløb (kr)</label><input class="fi" type="number" id="gf-received" value="${f.amount_received||''}"></div>
+    </div>
+    <div class="field">
+      <label>Budgetfordeling — hvad bruges pengene til?</label>
+      <div class="budget-editor">
+        <div class="budget-editor-head">Budgetfordeling <span class="budget-editor-total" id="budget-editor-total">${total>0?kr(total):'—'}</span></div>
+        ${budgetRows}
+        <div class="budget-editor-preview" id="budget-editor-preview" style="${total>0?'':'display:none'}">${buildBudgetPreview()}</div>
+      </div>
+    </div>
+    <div class="field"><label>Noter</label><textarea class="fi" id="gf-notes" rows="2">${esc(f.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuller</button>
+      <button class="btn" onclick="saveGrant()">Gem</button>
+    </div>`;
+}
+
+function buildBudgetPreview() {
+  const budget = grantForm.budget;
+  const total = totalBudget(budget);
+  if (!total) return '';
+  const cats = BUDGET_CATS.filter(c=>(budget[c.id]||0)>0);
+  const segs = cats.map(c=>`<div style="flex:${budget[c.id]/total};background:${c.color};min-width:2px" title="${c.label}: ${kr(budget[c.id])}"></div>`).join('');
+  const labels = cats.map(c=>`<span style="font-size:11px;color:var(--text3)"><span style="color:${c.color};font-weight:600">${c.label}</span> ${kr(budget[c.id])}</span>`).join('');
+  return `<div class="budget-editor-preview-bar">${segs}</div><div class="budget-editor-preview-labels" style="display:flex;flex-wrap:wrap;gap:4px 12px">${labels}</div>`;
+}
+
+function updateBudgetCat(catId, value) {
+  const v = Number(value) || 0;
+  if (v === 0) delete grantForm.budget[catId];
+  else grantForm.budget[catId] = v;
+  const total = totalBudget(grantForm.budget);
+  const totalEl = document.getElementById('budget-editor-total');
+  const previewEl = document.getElementById('budget-editor-preview');
+  if (totalEl) totalEl.textContent = total>0?kr(total):'—';
+  if (previewEl) {
+    previewEl.style.display = total>0?'':'none';
+    previewEl.innerHTML = buildBudgetPreview();
+  }
+  const appliedEl = document.getElementById('gf-applied');
+  if (appliedEl && !appliedEl.value) appliedEl.placeholder = total || '0';
+}
+
+async function saveGrant() {
+  const name = document.getElementById('gf-name').value.trim();
+  if (!name) return toast('Navn er påkrævet');
+  const budgTotal = totalBudget(grantForm.budget);
+  const data = {
+    name,
+    description: document.getElementById('gf-desc').value.trim(),
+    status: document.getElementById('gf-status').value,
+    deadline: document.getElementById('gf-deadline').value || null,
+    amount_applied: Number(document.getElementById('gf-applied').value) || budgTotal || 0,
+    amount_received: Number(document.getElementById('gf-received').value) || 0,
+    budget: grantForm.budget,
+    notes: document.getElementById('gf-notes').value.trim(),
+  };
+  if (grantForm.id) {
+    const updated = await apiFetch(`/api/fundraising/${grantForm.id}`, 'PUT', data);
+    const idx = state.grants.findIndex(g=>g.id===grantForm.id);
+    if (idx>=0) state.grants[idx] = updated;
+  } else {
+    const created = await apiFetch('/api/fundraising', 'POST', data);
+    state.grants.push(created);
+  }
+  closeModal();
+  renderGrants(); renderDashboard(); updateBadges();
+  toast(grantForm.id?'Tilskud opdateret':'Tilskud oprettet');
+}
+
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+function renderTasks() {
+  const fA = document.getElementById('task-filter-assignee')?.value || '';
+  const fS = document.getElementById('task-filter-status')?.value || '';
+  const { tasks } = state;
+  const assignees = [...new Set(tasks.filter(t=>t.assignee).map(t=>t.assignee))].sort();
+  const sel = document.getElementById('task-filter-assignee');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">Alle ansvarlige</option>${assignees.map(a=>`<option value="${esc(a)}" ${cur===a?'selected':''}>${esc(a)}</option>`).join('')}`;
+    sel.value = cur;
+  }
+  const overdueCount = tasks.filter(t=>t.due_date&&t.due_date<TODAY&&t.status!=='done').length;
+  const infoEl = document.getElementById('task-filter-info');
+  if (infoEl) infoEl.innerHTML = `${overdueCount>0?`<span style="color:var(--red)">${overdueCount} overskredet</span>`:''}${tasks.filter(t=>t.status!=='done').length} åbne`;
+
+  const filtered = tasks.filter(t=>(!fA||t.assignee===fA)&&(!fS||t.status===fS)).sort((a,b)=>{
+    if (a.status==='done'&&b.status!=='done') return 1;
+    if (b.status==='done'&&a.status!=='done') return -1;
+    const pa={high:0,medium:1,low:2}[a.priority]??1, pb={high:0,medium:1,low:2}[b.priority]??1;
+    if (pa!==pb) return pa-pb;
+    if (!a.due_date&&!b.due_date) return 0; if (!a.due_date) return 1; if (!b.due_date) return -1;
+    return a.due_date.localeCompare(b.due_date);
+  });
+
+  const wrap = document.getElementById('tasks-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<table>
+    <thead><tr>${['','Opgave','Ansvarlig','Status','Prioritet','Frist',''].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${filtered.map(r=>{
+        const overdue = r.due_date&&r.due_date<TODAY&&r.status!=='done';
+        const done = r.status==='done';
+        return `<tr style="opacity:${done?'0.5':'1'};cursor:default">
+          <td style="width:32px">
+            <div class="task-check${done?' checked':''}" onclick="toggleTask(${r.id})" title="${done?'Markér som åben':'Markér som færdig'}">
+              ${done?`<span style="color:var(--green)">${ICON.check}</span>`:''}
+            </div>
+          </td>
+          <td>
+            <div style="font-size:13px;font-weight:500;color:${done?'var(--text3)':'var(--text)'};text-decoration:${done?'line-through':'none'}">${esc(r.title)}</div>
+            ${r.notes?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${esc(r.notes.slice(0,60))}${r.notes.length>60?'…':''}</div>`:''}
+          </td>
+          <td style="font-size:13px;color:var(--text2);white-space:nowrap">${esc(r.assignee||'—')}</td>
+          <td>${badge(r.status, TASK_STATUS_DA[r.status]||r.status)}</td>
+          <td><div style="display:flex;align-items:center;gap:6px">${priDot(r.priority)}<span style="font-size:12px;color:var(--text3)">${PRI_DA[r.priority]||r.priority}</span></div></td>
+          <td style="font-size:13px;white-space:nowrap;color:${overdue?'var(--red)':isSoon(r.due_date)?'var(--accent)':'var(--text2)'};font-weight:${overdue?600:400}">
+            ${r.due_date?fmtDate(r.due_date):'—'}${overdue?` <span style="color:var(--red)">${ICON.warn}</span>`:''}
+          </td>
+          <td>
+            <div style="display:flex;gap:5px">
+              ${iconBtn(`openTaskModal(${r.id})`, 'Rediger', ICON.edit, false, 26)}
+              ${iconBtn(`deleteTask(${r.id})`, 'Slet', ICON.trash, true, 26)}
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}
+      ${filtered.length===0?`<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Ingen opgaver matcher</td></tr>`:''}
+    </tbody>
+  </table>`;
+}
+
+async function toggleTask(id) {
+  const t = state.tasks.find(t=>t.id===id);
+  if (!t) return;
+  const newStatus = t.status==='done'?'todo':'done';
+  const updated = await apiFetch(`/api/tasks/${id}`, 'PUT', { ...t, status: newStatus });
+  Object.assign(t, updated);
+  renderTasks(); renderDashboard(); updateBadges();
+}
+
+async function deleteTask(id) {
+  if (!confirm('Slet opgave?')) return;
+  await apiFetch(`/api/tasks/${id}`, 'DELETE');
+  state.tasks = state.tasks.filter(t=>t.id!==id);
+  renderTasks(); renderDashboard(); updateBadges();
+  toast('Opgave slettet');
+}
+
+let taskForm = {};
+function openTaskModal(id) {
+  const r = id ? state.tasks.find(t=>t.id===id) : null;
+  taskForm = r ? {...r} : { title:'', assignee:'', status:'todo', priority:'medium', due_date:'', notes:'' };
+  document.getElementById('modal-box').classList.remove('wide');
+  showModal(r?'Rediger opgave':'Ny opgave', buildTaskModalBody());
+}
+
+function buildTaskModalBody() {
+  const f = taskForm;
+  return `
+    <div class="field"><label>Titel</label><input class="fi" id="tf-title" value="${esc(f.title||'')}" autofocus></div>
+    <div class="field"><label>Ansvarlig</label><input class="fi" id="tf-assignee" value="${esc(f.assignee||'')}" placeholder="Navn"></div>
+    <div class="field-grid">
+      <div class="field"><label>Status</label><select class="fi" id="tf-status">
+        <option value="todo" ${f.status==='todo'?'selected':''}>Todo</option>
+        <option value="started" ${f.status==='started'?'selected':''}>I gang</option>
+        <option value="done" ${f.status==='done'?'selected':''}>Færdig</option>
+      </select></div>
+      <div class="field"><label>Prioritet</label><select class="fi" id="tf-priority">
+        <option value="low" ${f.priority==='low'?'selected':''}>Lav</option>
+        <option value="medium" ${f.priority==='medium'?'selected':''}>Medium</option>
+        <option value="high" ${f.priority==='high'?'selected':''}>Høj</option>
+      </select></div>
+    </div>
+    <div class="field"><label>Forfaldsdato</label><input class="fi" type="date" id="tf-due" value="${f.due_date||''}"></div>
+    <div class="field"><label>Noter</label><textarea class="fi" id="tf-notes" rows="2">${esc(f.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuller</button>
+      <button class="btn" onclick="saveTask()">Gem</button>
+    </div>`;
+}
+
+async function saveTask() {
+  const title = document.getElementById('tf-title').value.trim();
+  if (!title) return toast('Titel er påkrævet');
+  const data = {
+    title,
+    assignee: document.getElementById('tf-assignee').value.trim(),
+    status:   document.getElementById('tf-status').value,
+    priority: document.getElementById('tf-priority').value,
+    due_date: document.getElementById('tf-due').value || null,
+    notes:    document.getElementById('tf-notes').value.trim(),
+  };
+  if (taskForm.id) {
+    const updated = await apiFetch(`/api/tasks/${taskForm.id}`, 'PUT', data);
+    const idx = state.tasks.findIndex(t=>t.id===taskForm.id);
+    if (idx>=0) state.tasks[idx] = updated;
+  } else {
+    const created = await apiFetch('/api/tasks', 'POST', data);
+    state.tasks.push(created);
+  }
+  closeModal();
+  renderTasks(); renderDashboard(); updateBadges();
+  toast(taskForm.id?'Opgave opdateret':'Opgave oprettet');
+}
+
+// ── Ideas ─────────────────────────────────────────────────────────────────────
+function renderIdeas() {
+  const fS = document.getElementById('idea-filter-status')?.value || '';
+  const { ideas } = state;
+
+  const allTags = [...new Set(ideas.flatMap(r=>(r.tags||'').split(',').map(t=>t.trim()).filter(Boolean)))].sort();
+  const filterRow = document.getElementById('idea-filter-row');
+  if (filterRow) {
+    const existingTags = filterRow.querySelectorAll('.tag-filter');
+    existingTags.forEach(t=>t.remove());
+    allTags.forEach(t=>{
+      const h = tagHue(t);
+      const active = ideaFilterTag===t;
+      const span = document.createElement('span');
+      span.className = 'tag-filter' + (active?' active':'');
+      span.style.cssText = `padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:${active?`hsl(${h},55%,55%)`:`hsla(${h},55%,55%,0.15)`};color:${active?'#fff':`hsl(${h},55%,65%)`};border:1px solid hsla(${h},55%,55%,0.35);font-weight:${active?600:400}`;
+      span.textContent = t;
+      span.onclick = () => { ideaFilterTag = active?'':t; renderIdeas(); };
+      filterRow.appendChild(span);
+    });
+  }
+
+  const filtered = ideas.filter(r=>(!fS||r.status===fS)&&(!ideaFilterTag||(r.tags||'').split(',').map(t=>t.trim()).includes(ideaFilterTag))).sort((a,b)=>(b.vote_score||0)-(a.vote_score||0));
+
+  const grid = document.getElementById('ideas-grid');
+  if (!grid) return;
+  if (filtered.length===0) { grid.innerHTML=`<div style="grid-column:span 2;padding:40px;text-align:center;color:var(--text3);font-size:13px">Ingen idéer</div>`; return; }
+
+  grid.innerHTML = filtered.map(idea=>{
+    const tags = (idea.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const score = idea.vote_score||0;
+    return `<div class="idea-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="font-weight:600;font-size:14px;line-height:1.3;flex:1">${esc(idea.title)}</div>
+        ${badge(idea.status, IDEA_STATUS_DA[idea.status]||idea.status)}
+      </div>
+      ${idea.description?`<p style="font-size:12px;color:var(--text2);line-height:1.5;margin:0">${esc(idea.description)}</p>`:''}
+      ${idea.category?`<span style="font-size:11px;color:var(--text3)">${esc(idea.category)}</span>`:''}
+      ${tags.length>0?`<div style="display:flex;flex-wrap:wrap;gap:4px">${tags.map(t=>{ const h=tagHue(t); return `<span style="padding:2px 8px;border-radius:10px;font-size:11px;background:hsla(${h},55%,55%,0.15);color:hsl(${h},55%,65%)">${esc(t)}</span>`; }).join('')}</div>`:''}
+      <div class="idea-card-footer">
+        <div class="vote-controls">
+          <button class="vote-btn plus" onclick="voteIdea(${idea.id},1)">+</button>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:${score>0?'var(--green)':score<0?'var(--red)':'var(--text2)'};min-width:22px;text-align:center">${score}</span>
+          <button class="vote-btn minus" onclick="voteIdea(${idea.id},-1)">−</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          ${idea.status!=='approved'?`<button class="approve-btn" onclick="approveIdea(${idea.id})">Godkend</button>`:''}
+          ${iconBtn(`openIdeaModal(${idea.id})`, 'Rediger', ICON.edit, false, 26)}
+          ${iconBtn(`deleteIdea(${idea.id})`, 'Slet', ICON.trash, true, 26)}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function voteIdea(id, dir) {
+  const idea = state.ideas.find(i=>i.id===id);
+  if (!idea) return;
+  const updated = await apiFetch(`/api/ideas/${id}/vote`, 'POST', { direction: dir });
+  Object.assign(idea, updated);
+  renderIdeas(); renderDashboard();
+}
+
+async function approveIdea(id) {
+  const updated = await apiFetch(`/api/ideas/${id}/approve`, 'POST', {});
+  const idea = state.ideas.find(i=>i.id===id);
+  if (idea) Object.assign(idea, updated);
+  renderIdeas(); updateBadges();
+  toast('Idé godkendt');
+}
+
+async function deleteIdea(id) {
+  if (!confirm('Slet idé?')) return;
+  await apiFetch(`/api/ideas/${id}`, 'DELETE');
+  state.ideas = state.ideas.filter(i=>i.id!==id);
+  renderIdeas(); renderDashboard(); updateBadges();
+  toast('Idé slettet');
+}
+
+let ideaForm = {};
+function openIdeaModal(id) {
+  const r = id ? state.ideas.find(i=>i.id===id) : null;
+  ideaForm = r ? {...r} : { title:'', description:'', category:'', tags:'', status:'new' };
+  document.getElementById('modal-box').classList.remove('wide');
+  showModal(r?'Rediger idé':'Ny idé', buildIdeaModalBody());
+}
+
+function buildIdeaModalBody() {
+  const f = ideaForm;
+  return `
+    <div class="field"><label>Titel</label><input class="fi" id="if-title" value="${esc(f.title||'')}" autofocus></div>
+    <div class="field"><label>Beskrivelse</label><textarea class="fi" id="if-desc" rows="3">${esc(f.description||'')}</textarea></div>
+    <div class="field-grid">
+      <div class="field"><label>Kategori</label><input class="fi" id="if-cat" value="${esc(f.category||'')}" placeholder="f.eks. aktivitet"></div>
+      <div class="field"><label>Status</label><select class="fi" id="if-status">
+        <option value="new" ${f.status==='new'?'selected':''}>Ny</option>
+        <option value="discussed" ${f.status==='discussed'?'selected':''}>Diskuteret</option>
+        <option value="approved" ${f.status==='approved'?'selected':''}>Godkendt</option>
+        <option value="archived" ${f.status==='archived'?'selected':''}>Arkiveret</option>
+      </select></div>
+    </div>
+    <div class="field"><label>Tags (kommasepareret)</label><input class="fi" id="if-tags" value="${esc(f.tags||'')}" placeholder="sommer, familie"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuller</button>
+      <button class="btn" onclick="saveIdea()">Gem</button>
+    </div>`;
+}
+
+async function saveIdea() {
+  const title = document.getElementById('if-title').value.trim();
+  if (!title) return toast('Titel er påkrævet');
+  const data = {
+    title,
+    description: document.getElementById('if-desc').value.trim(),
+    category:    document.getElementById('if-cat').value.trim(),
+    status:      document.getElementById('if-status').value,
+    tags:        document.getElementById('if-tags').value.trim(),
+  };
+  if (ideaForm.id) {
+    const updated = await apiFetch(`/api/ideas/${ideaForm.id}`, 'PUT', data);
+    const idx = state.ideas.findIndex(i=>i.id===ideaForm.id);
+    if (idx>=0) state.ideas[idx] = updated;
+  } else {
+    const created = await apiFetch('/api/ideas', 'POST', data);
+    state.ideas.push(created);
+  }
+  closeModal();
+  renderIdeas(); renderDashboard(); updateBadges();
+  toast(ideaForm.id?'Idé opdateret':'Idé oprettet');
+}
+
+// ── Årshjul ───────────────────────────────────────────────────────────────────
+function renderArhjul() {
+  const { events } = state;
+  const future30 = new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+  const upcoming = events.filter(e=>e.event_date>=TODAY&&e.event_date<=future30).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+
+  const banner = document.getElementById('next-30-banner');
+  const chips  = document.getElementById('next-30-chips');
+  if (upcoming.length>0 && banner && chips) {
+    banner.style.display = '';
+    chips.innerHTML = upcoming.map(e=>{
+      const col = CAT_COLORS[e.category]||'#8b90a0';
+      return `<div class="next-30-chip" style="background:${col}18;border:1px solid ${col}30" onclick="showEventDetail(${e.id})">
+        <span style="width:6px;height:6px;border-radius:50%;background:${col};display:inline-block"></span>
+        <span style="font-weight:600">${fmtShort(e.event_date)}</span>
+        <span style="color:var(--text2)">${esc(e.title)}</span>
+        ${e.needs_comms?`<span style="color:var(--blue)">${ICON.announce}</span>`:''}
+      </div>`;
+    }).join('');
+  } else if (banner) banner.style.display = 'none';
+
+  const legend = document.getElementById('cat-legend');
+  if (legend) legend.innerHTML = Object.entries(CAT_LABELS).map(([k,v])=>`<div class="cat-legend-item"><span style="width:8px;height:8px;border-radius:50%;background:${CAT_COLORS[k]};display:inline-block"></span>${v}</div>`).join('');
+
+  const grid = document.getElementById('arhjul-grid');
+  if (!grid) return;
+  const currentMonth = new Date().getMonth();
+  grid.innerHTML = MONTHS.map((month, mi)=>{
+    const evts = events.filter(e=>{
+      if (!e.event_date) return false;
+      const d = new Date(e.event_date+'T00:00:00');
+      if (d.getMonth()===mi) return true;
+      if (e.end_date) {
+        const ed = new Date(e.end_date+'T00:00:00');
+        return d.getMonth()<=mi && ed.getMonth()>=mi;
+      }
+      return false;
+    }).sort((a,b)=>a.event_date.localeCompare(b.event_date));
+    const isCurrent = currentMonth===mi;
+    return `<div class="month-col${isCurrent?' current':''}">
+      <div class="month-col-head">
+        <span class="month-label">${MONTHS_SHORT[mi]}</span>
+        ${evts.length>0?`<span class="month-count">${evts.length}</span>`:''}
+      </div>
+      <div class="month-events">
+        ${evts.map(e=>{
+          const col = CAT_COLORS[e.category]||'#8b90a0';
+          const d = new Date(e.event_date+'T00:00:00');
+          return `<div class="event-chip" style="border-left-color:${col}" onclick="showEventDetail(${e.id})">
+            <span class="event-chip-day">${d.getDate()}.</span>
+            <span class="event-chip-title">${esc(e.title)}</span>
+            ${e.needs_comms?`<span style="color:var(--blue)">${ICON.announce}</span>`:''}
+            ${e.recurring?`<span style="color:var(--text3)">${ICON.repeat}</span>`:''}
+          </div>`;
+        }).join('')}
+        ${evts.length===0?`<div class="month-empty">—</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showEventDetail(id) {
+  const e = state.events.find(ev=>ev.id===id);
+  if (!e) return;
+  document.getElementById('modal-box').classList.remove('wide');
+  showModal(e.title, `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${[
+        ['Dato', fmtDate(e.event_date)],
+        e.end_date ? ['Slutdato', fmtDate(e.end_date)] : null,
+        ['Kategori', CAT_LABELS[e.category]||e.category||'—'],
+        e.description ? ['Beskrivelse', e.description] : null,
+        ['Tilbagevendende', e.recurring||'Nej'],
+        ['Kommunikation', e.needs_comms?'Ja':'Nej'],
+      ].filter(Boolean).map(([k,v])=>`
+        <div style="display:flex;gap:12px;font-size:13px">
+          <span style="color:var(--text3);min-width:110px;flex-shrink:0">${k}</span>
+          <span>${esc(String(v))}</span>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+      <button class="btn btn-danger btn-sm" onclick="deleteEvent(${e.id})">Slet</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();openEventModal(${e.id})">Rediger</button>
+    </div>`);
+}
+
+async function deleteEvent(id) {
+  if (!confirm('Slet event?')) return;
+  await apiFetch(`/api/events/${id}`, 'DELETE');
+  state.events = state.events.filter(e=>e.id!==id);
+  closeModal(); renderArhjul(); renderDashboard();
+  toast('Event slettet');
+}
+
+let eventForm = {};
+function openEventModal(id) {
+  const r = id ? state.events.find(e=>e.id===id) : null;
+  eventForm = r ? {...r, needs_comms:!!r.needs_comms} : { title:'', event_date:'', end_date:'', category:'activity', description:'', recurring:'', needs_comms:false };
+  document.getElementById('modal-box').classList.remove('wide');
+  showModal(r?'Rediger event':'Nyt event', buildEventModalBody());
+}
+
+function buildEventModalBody() {
+  const f = eventForm;
+  return `
+    <div class="field"><label>Titel</label><input class="fi" id="ef-title" value="${esc(f.title||'')}" autofocus></div>
+    <div class="field-grid">
+      <div class="field"><label>Startdato</label><input class="fi" type="date" id="ef-date" value="${f.event_date||''}"></div>
+      <div class="field"><label>Slutdato (valgfri)</label><input class="fi" type="date" id="ef-end" value="${f.end_date||''}"></div>
+    </div>
+    <div class="field"><label>Kategori</label><select class="fi" id="ef-cat">
+      ${Object.entries(CAT_LABELS).map(([k,v])=>`<option value="${k}" ${f.category===k?'selected':''}>${v}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Beskrivelse</label><textarea class="fi" id="ef-desc" rows="2">${esc(f.description||'')}</textarea></div>
+    <div class="field-grid">
+      <div class="field"><label>Tilbagevendende</label><select class="fi" id="ef-rec">
+        <option value="" ${!f.recurring?'selected':''}>Ingen</option>
+        <option value="yearly" ${f.recurring==='yearly'?'selected':''}>Hvert år</option>
+        <option value="monthly" ${f.recurring==='monthly'?'selected':''}>Månedligt</option>
+      </select></div>
+      <div class="field"><label>Kommunikation</label>
+        <div style="display:flex;align-items:center;gap:8px;padding-top:8px">
+          <input type="checkbox" id="ef-comms" ${f.needs_comms?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+          <label for="ef-comms" style="font-size:13px;color:var(--text2);cursor:pointer;text-transform:none;letter-spacing:0">Kræver opslag</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuller</button>
+      <button class="btn" onclick="saveEvent()">Gem</button>
+    </div>`;
+}
+
+async function saveEvent() {
+  const title = document.getElementById('ef-title').value.trim();
+  const event_date = document.getElementById('ef-date').value;
+  if (!title || !event_date) return toast('Titel og startdato er påkrævet');
+  const data = {
+    title, event_date,
+    end_date:    document.getElementById('ef-end').value || null,
+    category:    document.getElementById('ef-cat').value,
+    description: document.getElementById('ef-desc').value.trim(),
+    recurring:   document.getElementById('ef-rec').value || null,
+    needs_comms: document.getElementById('ef-comms').checked ? 1 : 0,
+  };
+  if (eventForm.id) {
+    const updated = await apiFetch(`/api/events/${eventForm.id}`, 'PUT', data);
+    const idx = state.events.findIndex(e=>e.id===eventForm.id);
+    if (idx>=0) state.events[idx] = updated;
+  } else {
+    const created = await apiFetch('/api/events', 'POST', data);
+    state.events.push(created);
+  }
+  closeModal();
+  renderArhjul(); renderDashboard();
+  toast(eventForm.id?'Event opdateret':'Event oprettet');
+}
+
+// ── Communications ────────────────────────────────────────────────────────────
+function switchCommsTab(tab) {
+  commsSubTab = tab;
+  document.querySelectorAll('#panel-comms .sub-tab').forEach((el,i)=>{
+    el.classList.toggle('active', (i===0&&tab==='calendar')||(i===1&&tab==='log'));
+  });
+  document.getElementById('comms-calendar').style.display = tab==='calendar'?'flex':'none';
+  document.getElementById('comms-log').style.display = tab==='log'?'flex':'none';
+  renderComms();
+}
+
+function renderComms() {
+  const { posts, events } = state;
+  const needsComms = events.filter(e=>e.needs_comms&&!posts.some(p=>p.event_id===e.id));
+  const alertEl = document.getElementById('needs-comms-alert');
+  if (alertEl) {
+    if (needsComms.length>0) {
+      alertEl.style.display = '';
+      alertEl.innerHTML = `<span style="color:var(--accent)">${ICON.warn}</span><span style="flex:1">${needsComms.length} ${needsComms.length===1?'event mangler':'events mangler'} opslag: ${needsComms.slice(0,3).map(e=>esc(e.title)).join(', ')}${needsComms.length>3?'…':''}</span>`;
+    } else alertEl.style.display = 'none';
+  }
+
+  if (commsSubTab==='calendar') renderCommsCalendar(posts);
+  else renderCommsLog(posts);
+}
+
+function renderCommsCalendar(posts) {
+  const calEl = document.getElementById('comms-calendar');
+  if (!calEl) return;
+  const firstDay = new Date(commsCalY, commsCalM, 1).getDay();
+  const daysInMonth = new Date(commsCalY, commsCalM+1, 0).getDate();
+  const emptyBefore = firstDay===0?6:firstDay-1;
+
+  const postsForDay = d => {
+    const ds = `${commsCalY}-${String(commsCalM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    return posts.filter(p=>p.planned_date===ds);
+  };
+
+  let cells = '';
+  for (let i=0;i<emptyBefore;i++) cells+=`<div class="cal-day empty"></div>`;
+  for (let d=1;d<=daysInMonth;d++) {
+    const ds = `${commsCalY}-${String(commsCalM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = ds===TODAY;
+    const dayPosts = postsForDay(d);
+    const pillsHtml = dayPosts.map(p=>{
+      const col = STATUS_COLORS[p.status]||'#8b90a0';
+      return `<div onclick="event.stopPropagation();openPostModal(${p.id})" style="font-size:10px;padding:2px 5px;border-radius:3px;margin-bottom:2px;background:${col}20;border-left:2px solid ${col};color:${col};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer">${esc(p.title)}</div>`;
+    }).join('');
+    cells += `<div class="cal-day${isToday?' today':''}" onclick="openPostModal(null,'${ds}')">
+      <div class="cal-day-num">${d}</div>
+      ${pillsHtml}
+    </div>`;
+  }
+
+  calEl.innerHTML = `
+    <div class="cal-nav">
+      <button class="icon-btn" onclick="commsCalPrev()">${ICON.left}</button>
+      <span class="cal-month-label">${MONTHS[commsCalM]} ${commsCalY}</span>
+      <button class="icon-btn" onclick="commsCalNext()">${ICON.right}</button>
+    </div>
+    <div style="flex:1;overflow:auto">
+      <div class="cal-grid">
+        ${['Man','Tir','Ons','Tor','Fre','Lør','Søn'].map(d=>`<div class="cal-day-head">${d}</div>`).join('')}
+        ${cells}
+      </div>
+    </div>`;
+}
+
+function commsCalPrev() {
+  if (commsCalM===0) { commsCalM=11; commsCalY--; } else commsCalM--;
+  renderCommsCalendar(state.posts);
+}
+function commsCalNext() {
+  if (commsCalM===11) { commsCalM=0; commsCalY++; } else commsCalM++;
+  renderCommsCalendar(state.posts);
+}
+
+function renderCommsLog(posts) {
+  const logEl = document.getElementById('comms-log');
+  if (!logEl) return;
+  const sorted = [...posts].sort((a,b)=>(b.planned_date||'').localeCompare(a.planned_date||''));
+  logEl.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>${['Dato','Platform','Titel','Postet af','Status',''].map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${sorted.map(p=>`<tr onclick="openPostModal(${p.id})">
+        <td style="font-size:13px;color:var(--text2);white-space:nowrap">${p.planned_date?fmtDate(p.planned_date):'—'}</td>
+        <td style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px">${esc(p.platform||'')}</td>
+        <td style="font-size:13px;font-weight:500">${esc(p.title)}</td>
+        <td style="font-size:13px;color:var(--text2)">${esc(p.posted_by||'—')}</td>
+        <td>${badge(p.status, POST_STATUS_DA[p.status]||p.status)}</td>
+        <td onclick="event.stopPropagation()">
+          <div style="display:flex;gap:5px">
+            ${iconBtn(`openPostModal(${p.id})`, 'Rediger', ICON.edit, false, 26)}
+            ${iconBtn(`deletePost(${p.id})`, 'Slet', ICON.trash, true, 26)}
+          </div>
+        </td>
+      </tr>`).join('')}
+      ${posts.length===0?`<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Ingen opslag endnu</td></tr>`:''}
+    </tbody>
+  </table></div>`;
+}
+
+async function deletePost(id) {
+  if (!confirm('Slet opslag?')) return;
+  await apiFetch(`/api/content-posts/${id}`, 'DELETE');
+  state.posts = state.posts.filter(p=>p.id!==id);
+  renderComms();
+  toast('Opslag slettet');
+}
+
+let postForm = {};
+function openPostModal(id, prefillDate) {
+  const r = id ? state.posts.find(p=>p.id===id) : null;
+  postForm = r ? {...r} : { title:'', platform:'facebook', planned_date: prefillDate||'', status:'draft', event_id:'', posted_by:'', link:'', notes:'' };
+  document.getElementById('modal-box').classList.remove('wide');
+  showModal(r?'Rediger opslag':'Nyt opslag', buildPostModalBody());
+}
+
+function buildPostModalBody() {
+  const f = postForm;
+  const { events } = state;
+  return `
+    <div class="field"><label>Titel</label><input class="fi" id="pf-title" value="${esc(f.title||'')}" autofocus></div>
+    <div class="field-grid">
+      <div class="field"><label>Platform</label><select class="fi" id="pf-platform">
+        <option value="facebook" ${f.platform==='facebook'?'selected':''}>Facebook</option>
+        <option value="instagram" ${f.platform==='instagram'?'selected':''}>Instagram</option>
+        <option value="linkedin" ${f.platform==='linkedin'?'selected':''}>LinkedIn</option>
+        <option value="multiple" ${f.platform==='multiple'?'selected':''}>Flere</option>
+      </select></div>
+      <div class="field"><label>Planlagt dato</label><input class="fi" type="date" id="pf-date" value="${f.planned_date||''}"></div>
+    </div>
+    <div class="field"><label>Tilknyt event</label><select class="fi" id="pf-event">
+      <option value="">— intet —</option>
+      ${events.map(e=>`<option value="${e.id}" ${Number(f.event_id)===e.id?'selected':''}>${esc(e.title)}</option>`).join('')}
+    </select></div>
+    <div class="field-grid">
+      <div class="field"><label>Status</label><select class="fi" id="pf-status">
+        <option value="draft" ${f.status==='draft'?'selected':''}>Kladde</option>
+        <option value="scheduled" ${f.status==='scheduled'?'selected':''}>Planlagt</option>
+        <option value="posted" ${f.status==='posted'?'selected':''}>Postet</option>
+      </select></div>
+      <div class="field"><label>Postet af</label><input class="fi" id="pf-by" value="${esc(f.posted_by||'')}" placeholder="Navn"></div>
+    </div>
+    <div class="field"><label>Link</label><input class="fi" id="pf-link" value="${esc(f.link||'')}" placeholder="https://…"></div>
+    <div class="field"><label>Noter</label><textarea class="fi" id="pf-notes" rows="2">${esc(f.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuller</button>
+      <button class="btn" onclick="savePost()">Gem</button>
+    </div>`;
+}
+
+async function savePost() {
+  const title = document.getElementById('pf-title').value.trim();
+  if (!title) return toast('Titel er påkrævet');
+  const data = {
+    title,
+    platform:    document.getElementById('pf-platform').value,
+    planned_date: document.getElementById('pf-date').value || null,
+    event_id:    Number(document.getElementById('pf-event').value) || null,
+    status:      document.getElementById('pf-status').value,
+    posted_by:   document.getElementById('pf-by').value.trim(),
+    link:        document.getElementById('pf-link').value.trim(),
+    notes:       document.getElementById('pf-notes').value.trim(),
+  };
+  if (postForm.id) {
+    const updated = await apiFetch(`/api/content-posts/${postForm.id}`, 'PUT', data);
+    const idx = state.posts.findIndex(p=>p.id===postForm.id);
+    if (idx>=0) state.posts[idx] = updated;
+  } else {
+    const created = await apiFetch('/api/content-posts', 'POST', data);
+    state.posts.push(created);
+  }
+  closeModal();
+  renderComms();
+  toast(postForm.id?'Opslag opdateret':'Opslag oprettet');
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function showModal(title, bodyHtml) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(()=>{ const f = document.querySelector('#modal-body [autofocus]'); if(f) f.focus(); }, 50);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.getElementById('modal-body').innerHTML = '';
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function apiFetch(url, method='GET', body=null) {
+  const headers = {'Content-Type':'application/json'};
+  if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.error||res.statusText); }
+  if (method==='DELETE') return res.json().catch(()=>({}));
+  return res.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>{ el.classList.add('fade'); setTimeout(()=>el.remove(), 300); }, 2500);
+}
+
+// ── Keyboard Shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  if (e.key==='Escape') { closeModal(); return; }
+  if (e.key>='1'&&e.key<='6') {
+    const panels = ['dashboard','grants','tasks','ideas','arhjul','comms'];
+    const p = panels[Number(e.key)-1];
+    if (p) switchPanel(p);
+    return;
+  }
+  if (e.key.toLowerCase()==='n') {
+    if (activePanel==='grants')  { openGrantModal(null,'identified'); }
+    else if (activePanel==='tasks')  { openTaskModal(null); }
+    else if (activePanel==='ideas')  { openIdeaModal(null); }
+    else if (activePanel==='arhjul') { openEventModal(null); }
+    else if (activePanel==='comms')  { openPostModal(null); }
+  }
+});
+
+// ── CSRF Token ──────────────────────────────────────────────────────────────────
+let csrfToken = null;
+async function initCsrf() {
+  try {
+    const res = await fetch('/api/csrf-token');
+    const data = await res.json();
+    csrfToken = data.csrf_token;
+  } catch(e) {
+    console.error('CSRF init failed', e);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('sidebar-date').textContent = new Date().toLocaleDateString('da-DK',{day:'numeric',month:'long',year:'numeric'});
+initCsrf().then(() => loadAll());

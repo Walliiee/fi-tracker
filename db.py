@@ -1,8 +1,23 @@
 import sqlite3
 import json
 import os
+import logging
 
 DATABASE = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(__file__), 'data', 'fi_tracker.db'))
+
+MIGRATIONS = [
+    ('001', 'events: add needs_comms column',
+     'ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0'),
+    ('002', 'ideas: add vote_score column',
+     'ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0'),
+    ('003', 'ideas: add tags column',
+     'ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""'),
+    ('004', 'fundraising: add description column',
+     'ALTER TABLE fundraising ADD COLUMN description TEXT'),
+    ('005', 'fundraising: add budget column',
+     'ALTER TABLE fundraising ADD COLUMN budget TEXT DEFAULT "{}"'),
+]
+
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -12,27 +27,56 @@ def get_db():
     conn.execute('PRAGMA foreign_keys=ON')
     return conn
 
+
 def init_db():
     os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
     schema_path = os.path.join(os.path.dirname(__file__), 'schema.sql')
     conn = get_db()
     with open(schema_path, 'r') as f:
         conn.executescript(f.read())
-    conn.close()
-    _migrate()
-    _seed_events()
-
-def _migrate():
-    conn = get_db()
-    _add_column(conn, 'ALTER TABLE events ADD COLUMN needs_comms INTEGER DEFAULT 0')
-    _add_column(conn, 'ALTER TABLE ideas ADD COLUMN vote_score INTEGER DEFAULT 0')
-    _add_column(conn, 'ALTER TABLE ideas ADD COLUMN tags TEXT DEFAULT ""')
-    _add_column(conn, 'ALTER TABLE fundraising ADD COLUMN description TEXT')
-    _add_column(conn, 'ALTER TABLE fundraising ADD COLUMN budget TEXT DEFAULT "{}"')
     conn.commit()
-    # Migrate fund_pipeline entries to fundraising as status='research'
+    _run_migrations(conn)
     _migrate_pipeline_to_fundraising(conn)
+    _seed_events(conn)
     conn.close()
+
+
+def _run_migrations(conn):
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            description TEXT,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+
+    applied = {r['version'] for r in conn.execute(
+        'SELECT version FROM schema_migrations'
+    ).fetchall()}
+
+    for version, description, sql in MIGRATIONS:
+        if version in applied:
+            continue
+        try:
+            conn.execute(sql)
+            conn.execute(
+                'INSERT INTO schema_migrations (version, description) VALUES (?, ?)',
+                (version, description)
+            )
+            conn.commit()
+            logging.info('Migration %s applied: %s', version, description)
+        except sqlite3.OperationalError as e:
+            if 'duplicate column name' in str(e):
+                conn.execute(
+                    'INSERT OR IGNORE INTO schema_migrations (version, description) VALUES (?, ?)',
+                    (version, description)
+                )
+                conn.commit()
+                logging.info('Migration %s skipped (already present): %s', version, description)
+            else:
+                raise
+
 
 def _migrate_pipeline_to_fundraising(conn):
     pipeline = conn.execute('SELECT * FROM fund_pipeline').fetchall()
@@ -42,28 +86,21 @@ def _migrate_pipeline_to_fundraising(conn):
         "SELECT name FROM fundraising WHERE status='research'"
     ).fetchall()}
     to_migrate = [r for r in pipeline if r['fund_name'] not in existing_names]
+    if not to_migrate:
+        return
     for row in to_migrate:
         conn.execute(
             '''INSERT INTO fundraising (name, description, amount_applied, amount_received, status, deadline, budget, notes)
                VALUES (?, ?, ?, 0, 'research', ?, '{}', ?)''',
             (row['fund_name'], row['description'], row['amount_estimate'] or 0, row['deadline'], row['notes'])
         )
-    if to_migrate:
-        conn.commit()
+    conn.commit()
+    logging.info('Migrated %d fund_pipeline entries to fundraising', len(to_migrate))
 
-def _add_column(conn, sql):
-    try:
-        conn.execute(sql)
-    except sqlite3.OperationalError as e:
-        if 'duplicate column name' in str(e):
-            return
-        raise
 
-def _seed_events():
-    conn = get_db()
+def _seed_events(conn):
     count = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
     if count > 0:
-        conn.close()
         return
     seed_events = [
         ("Generalforsamling", "2026-03-15", None, "board", "Yearly AGM", "yearly", 0),
@@ -82,4 +119,3 @@ def _seed_events():
                VALUES (?, ?, ?, ?, ?, ?, ?)''', e
         )
     conn.commit()
-    conn.close()
